@@ -1,0 +1,31 @@
+name: Build OKDEV
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Prepare installer compatibility module
+        shell: pwsh
+        run: Copy-Item -LiteralPath injection/tools/patcher.py -Destination setup_app/patcher_check.py
+      - name: Run compatibility and installer tests
+        run: python -m unittest test.test_patcher_build_date injection.tests.test_early_patcher setup_app.test_setup
+      - name: Build application and native components
+        run: python scripts/build_pyinstaller.py
+      - name: Build setup executable
+        run: python scripts/build_okdev_setup.py
+      - name: Upload release candidates
+        uses: actions/upload-artifact@v4
+        with:
+          name: OKDEV-Windows
+          path: release/*
