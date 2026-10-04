@@ -47,29 +47,29 @@ def _dll_dialog_text(reason: str, detail: str = ""):
     source = "Get both files from LTK Manager."
     if reason == "expired":
         return (
-            "Rose - Patcher Outdated",
+            "OKDEV - Patcher Outdated",
             "The LTK patcher has reached its end of life",
-            f"The ltk_patcher_dll.dll in Rose's tools folder does not support game builds released after {detail}, and League has updated since.",
+            f"The ltk_patcher_dll.dll in OKDEV's tools folder stopped supporting new game builds on {detail}.",
             f"1. Update LTK Manager, then get both files from it.\n"
-            "2. Open Rose's tools folder.\n"
-            "3. Replace both files, then restart Rose.",
+            "2. Open OKDEV's tools folder.\n"
+            "3. Replace both files, then restart OKDEV.",
         )
     if reason == "invalid":
         return (
-            "Rose - Broken Patcher",
-            "One Rose component needs replacing",
-            "The ltk_patcher_dll.dll in Rose's tools folder is not a recognized LTK patcher DLL.",
+            "OKDEV - Broken Patcher",
+            "One OKDEV component needs replacing",
+            "The ltk_patcher_dll.dll in OKDEV's tools folder is not a recognized LTK patcher DLL.",
             f"1. {source}\n"
-            "2. Open Rose's tools folder.\n"
-            "3. Replace both files, then restart Rose.",
+            "2. Open OKDEV's tools folder.\n"
+            "3. Replace both files, then restart OKDEV.",
         )
     return (
-        "Rose - Missing Patcher",
-        "One Rose component is missing",
-        f"Rose needs {detail or 'the LTK patcher'} in its tools folder before it can start.",
+        "OKDEV - Missing Patcher",
+        "One OKDEV component is missing",
+        f"OKDEV needs {detail or 'the LTK patcher'} in its tools folder before it can start.",
         f"1. {source}\n"
-        "2. Open Rose's tools folder.\n"
-        "3. Place both files there, then restart Rose.",
+        "2. Open OKDEV's tools folder.\n"
+        "3. Place both files there, then restart OKDEV.",
     )
 
 
@@ -125,7 +125,7 @@ def _show_native_dll_dialog(tools_dir, reason="missing", detail=""):
     button_close = 1002
     buttons = (TaskDialogButton * 2)(
         TaskDialogButton(button_open, "Open tools folder"),
-        TaskDialogButton(button_close, "Close Rose"),
+        TaskDialogButton(button_close, "Close OKDEV"),
     )
     content = (
         f"{status_body}\n\nHow to fix it:\n{steps}"
@@ -273,7 +273,7 @@ def _show_dll_dialog(tools_dir, reason="missing", detail="") -> bool:
         f"{status_title}\n\n{status_body}\n\nHow to fix it:\n{steps}\n\n"
         "Please do not request or share this file in Discord.\n"
         "Discord: https://discord.gg/roseskins\n\n"
-        "Press OK to open the tools folder, or Cancel to close Rose."
+        "Press OK to open the tools folder, or Cancel to close OKDEV."
     )
     response = ctypes.windll.user32.MessageBoxW(
         0, message, title, 0x00000001 | 0x00000030 | 0x00040000
@@ -307,26 +307,25 @@ def _sync_cslol_stub(tools_dir: Path) -> None:
 
 
 def _check_dll_present() -> bool:
-    """Check that the user-provided LTK patcher is present and supports the installed game."""
+    """Check that the user-provided LTK patcher is present and not past its end of life."""
     import sys
     if sys.platform != "win32":
         return True  # Only relevant on Windows
 
     from datetime import datetime
-    from config import get_config_option
     from injection.tools.patcher import check_ltk_patcher
 
     tools_dir = _get_tools_dir()
     _sync_cslol_stub(tools_dir)
-    status = check_ltk_patcher(tools_dir)
+    from injection.config.config_manager import ConfigManager
+    game_path = ConfigManager().load_league_path()
+    game_exe = Path(game_path) / "League of Legends.exe" if game_path else None
+    status = check_ltk_patcher(tools_dir, game_exe)
     if status.missing:
         return _show_dll_dialog(tools_dir, reason="missing", detail=" and ".join(status.missing))
     if status.eol is None:
         return _show_dll_dialog(tools_dir, reason="invalid")
-    # The DLL keeps working past its end of life until League updates, so only
-    # block when the game Rose last found is a build it refuses
-    league_path = get_config_option("General", "leaguePath")
-    if status.expired_for(Path(league_path) if league_path else None):
+    if status.expired:
         eol = datetime.fromtimestamp(status.eol).strftime("%Y-%m-%d %H:%M")
         return _show_dll_dialog(tools_dir, reason="expired", detail=eol)
     return True
@@ -500,7 +499,7 @@ def run_league_unlock(args: Optional[argparse.Namespace] = None,
     check_single_instance()
 
     # Keep the Windows "Apps & features" version in sync after auto-updates
-    _update_registry_version()
+    # OKDEV does not update the upstream Rose registry entry.
 
     # Safety net: recover a previous session before startup. If League still owns
     # the loaded module, cleanup_if_dirty adopts the active session instead.
@@ -640,9 +639,14 @@ def run_league_unlock(args: Optional[argparse.Namespace] = None,
 
 def main() -> None:
     """Program entry point that prepares and launches Rose."""
+    from okdev_install_paths import apply_install_paths
+    apply_install_paths()
+
+    # Check for required DLL before anything else
+    if not _check_dll_present():
+        sys.exit(1)
+
     args = setup_arguments()
-    # Update before checking the DLL: a Rose that refuses to start still
-    # receives the version that fixes its check
     if sys.platform == "win32":
         if not args.dev:
             try:
@@ -655,9 +659,6 @@ def main() -> None:
                 print(f"[Launcher] Unable to import launcher module: {err}")
             except Exception as err:  # noqa: BLE001
                 print(f"[Launcher] Launcher encountered an error: {err}")
-
-    if not _check_dll_present():
-        sys.exit(1)
 
     run_league_unlock(args=args)
 
@@ -674,7 +675,7 @@ if __name__ == "__main__":
             report_issue(
                 "FATAL_CRASH",
                 "error",
-                "Rose crashed unexpectedly.",
+                "OKDEV crashed unexpectedly.",
                 details={"type": type(e).__name__, "error": str(e)},
                 hint="Check %LOCALAPPDATA%\\Rose\\logs\\ for details.",
             )
@@ -683,7 +684,7 @@ if __name__ == "__main__":
         
         error_msg = f"""
 ================================================================================
-FATAL ERROR - Rose Crashed
+FATAL ERROR - OKDEV Crashed
 ================================================================================
 Error: {e}
 Type: {type(e).__name__}
@@ -711,8 +712,8 @@ Log location: Check %LOCALAPPDATA%\\Rose\\logs\\
             try:
                 ctypes.windll.user32.MessageBoxW(
                     0,
-                    f"Rose crashed with an unhandled error:\n\n{str(e)}\n\nError type: {type(e).__name__}\n\nPlease check the log file in:\n%LOCALAPPDATA%\\Rose\\logs\\",
-                    "Rose - Fatal Error",
+                    f"OKDEV crashed with an unhandled error:\n\n{str(e)}\n\nError type: {type(e).__name__}\n\nPlease check the log file in:\n%LOCALAPPDATA%\\Rose\\logs\\",
+                    "OKDEV - Fatal Error",
                     0x50010  # MB_OK | MB_ICONERROR | MB_SETFOREGROUND | MB_TOPMOST
                 )
             except Exception:
