@@ -138,3 +138,14 @@ relay-worker/.wrangler/
 /test/
 injection/tools/cslol-dll.dll
 injection/tools/cslol-dll.stub
+
+# OKDEV build output and local verification
+release/
+setup_app/payload.zip
+setup_app/patcher_check.py
+setup_app/*.spec
+setup-smoke-result.txt
+.setup-verification/
+okdev-install.json
+Pengu Loader/config
+!test/test_patcher_build_date.py

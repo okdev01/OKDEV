@@ -421,7 +421,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='Rose',
+    name='OKDEV',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -433,6 +433,7 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon='assets/icon.ico',
+    version='okdev_version.txt',
     uac_admin=True,  # Request admin rights (required for injection)
 )
 
@@ -444,5 +445,5 @@ coll = COLLECT(
     strip=False,
     upx=False,
     upx_exclude=[],
-    name='Rose',
+    name='OKDEV',
 )
