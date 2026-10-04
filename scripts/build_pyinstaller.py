@@ -90,11 +90,13 @@ def build_cslol_stub():
 
 
 def check_relay_config():
-    """Refuse to build without the gitignored party relay config (party mode would ship broken)."""
+    """Default to no party relay until an OKDEV-owned service is configured."""
     config = ROOT / "party" / "network" / "relay_config.py"
-    if not config.exists() or "RELAY_URL" not in config.read_text(encoding="utf-8"):
-        print(f"[ERROR] Missing {config.relative_to(ROOT)} - party mode cannot reach its relay without it")
-        print('        Create it with: RELAY_URL = "wss://<relay-worker-host>"')
+    if not config.exists():
+        config.write_text('RELAY_URL = ""\n', encoding="utf-8")
+        print('[INFO] Party relay is not configured; solo use remains available.')
+    elif "RELAY_URL" not in config.read_text(encoding="utf-8"):
+        print('[ERROR] relay_config.py must define RELAY_URL')
         return False
 
     return True
@@ -127,7 +129,7 @@ def organize_output():
     """Organize output files and verify"""
     print_step(4, 4, "Organizing Output & Verification")
     
-    dist_folder = ROOT / "dist/Rose"
+    dist_folder = ROOT / "dist/OKDEV"
     
     if not dist_folder.exists():
         print("[ERROR] Build output not found!")
@@ -153,7 +155,13 @@ def main():
     if "--skip-pengu-loader" not in sys.argv[1:] and not build_pengu_loader():
         sys.exit(1)
 
-    if not build_cslol_stub():
+    if "--skip-cslol-stub" in sys.argv[1:]:
+        # Local repair builds can reuse the matching runtime from an installed Rose.
+        for name in ("cslol-dll.dll", "cslol-dll.stub"):
+            if not (ROOT / "injection" / "tools" / name).is_file():
+                print(f"[ERROR] Existing {name} is required with --skip-cslol-stub")
+                sys.exit(1)
+    elif not build_cslol_stub():
         sys.exit(1)
     
     if not build_with_pyinstaller():
@@ -169,7 +177,7 @@ def main():
     
     print_header("[OK] BUILD COMPLETED SUCCESSFULLY!")
     
-    exe_path = ROOT / "dist/Rose/Rose.exe"
+    exe_path = ROOT / "dist/OKDEV/OKDEV.exe"
     
     if exe_path.exists():
         size_mb = exe_path.stat().st_size / (1024 * 1024)
@@ -197,4 +205,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
