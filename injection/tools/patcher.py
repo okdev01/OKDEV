@@ -5,17 +5,14 @@ LTK patcher binaries (ltk_patcher_host.exe + ltk_patcher_dll.dll).
 
 Users provide their own copy (e.g. from an LTK Manager install); Rose does
 not ship or pin them. The DLL refuses game builds newer than its built-in
-end-of-life date, so we read that date and the game's build date to fail
-early instead of silently injecting nothing. A DLL past that date still works
-until League itself updates.
+end-of-life date, so we read that date to fail early instead of silently
+injecting nothing.
 """
 
 import struct
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
-
-from config import GAME_EXECUTABLE_NAMES
 
 LTK_PATCHER_HOST = "ltk_patcher_host.exe"
 LTK_PATCHER_DLL = "ltk_patcher_dll.dll"
@@ -32,26 +29,44 @@ class LtkPatcherStatus:
     dll: Path
     missing: list
     eol: Optional[int]  # Unix timestamp, None if it could not be read
+    game_build: Optional[int] = None
 
-    def expired_for(self, game_dir: Optional[Path]) -> bool:
-        """True when the DLL refuses the game installed in game_dir.
-
-        Unknown game builds count as supported: the DLL still reports a
-        refused build itself when the game starts.
-        """
-        if self.eol is None or game_dir is None:
-            return False
-        build = read_game_build(game_dir)
-        return build is not None and build > self.eol
+    @property
+    def expired(self) -> bool:
+        # The native DLL compares the game's PE timestamp, not the wall clock.
+        # If the game cannot be inspected yet, let the DLL check it at launch.
+        return (self.eol is not None and self.game_build is not None
+                and self.game_build > self.eol)
 
 
-def check_ltk_patcher(tools_dir: Path) -> LtkPatcherStatus:
+def check_ltk_patcher(tools_dir: Path, game_exe: Optional[Path] = None) -> LtkPatcherStatus:
     """Report which LTK patcher files are missing and the DLL's EOL date."""
     host = tools_dir / LTK_PATCHER_HOST
     dll = tools_dir / LTK_PATCHER_DLL
     missing = [p.name for p in (host, dll) if not p.is_file()]
     eol = read_dll_eol(dll) if dll.is_file() else None
-    return LtkPatcherStatus(host=host, dll=dll, missing=missing, eol=eol)
+    game_build = read_game_build(game_exe) if game_exe is not None else None
+    return LtkPatcherStatus(host=host, dll=dll, missing=missing, eol=eol,
+                            game_build=game_build)
+
+
+def read_game_build(game_exe: Path) -> Optional[int]:
+    """Read the COFF TimeDateStamp used by the native patcher compatibility check."""
+    try:
+        with game_exe.open('rb') as stream:
+            if stream.read(2) != b'MZ':
+                return None
+            stream.seek(0x3C)
+            pe_offset = struct.unpack('<I', stream.read(4))[0]
+            if pe_offset < 0x40:
+                return None
+            stream.seek(pe_offset)
+            header = stream.read(12)
+            if header[:4] != b'PE\0\0':
+                return None
+            return struct.unpack_from('<I', header, 8)[0]
+    except (OSError, ValueError, struct.error):
+        return None
 
 
 def read_dll_eol(dll_path: Path) -> Optional[int]:
@@ -89,27 +104,6 @@ def read_dll_eol(dll_path: Path) -> Optional[int]:
         eol = _find_eol_compare(code, i)
         if eol is not None:
             return eol
-    return None
-
-
-def read_game_build(game_dir: Path) -> Optional[int]:
-    """Return the build timestamp of the game executable in game_dir.
-
-    This is the PE header's TimeDateStamp, which the DLL reads from the game's
-    memory and compares against its end-of-life date.
-    """
-    for name in GAME_EXECUTABLE_NAMES:
-        try:
-            with open(Path(game_dir) / name, "rb") as f:
-                header = f.read(0x1000)
-        except OSError:
-            continue
-        try:
-            pe = struct.unpack_from("<I", header, 0x3C)[0]
-            if header[:2] == b"MZ" and header[pe:pe + 4] == b"PE\0\0":
-                return struct.unpack_from("<I", header, pe + 8)[0]
-        except struct.error:
-            pass
     return None
 
 
