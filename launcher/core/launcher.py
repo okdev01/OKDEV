@@ -108,7 +108,7 @@ def _confirm_update(dialog: UpdateDialog, remote_version: str, local_version: st
     result = user32.MessageBoxW(
         dialog.hwnd or None,
         message,
-        "Rose update available",
+        "OKDEV update available",
         MB_YESNO | MB_ICONINFORMATION | MB_DEFBUTTON2 | MB_TOPMOST,
     )
     accepted = result == IDYES
@@ -214,7 +214,7 @@ def _run_launcher_dialog(dev_mode: bool, test_download_fail: bool) -> None:
 
         def worker():
             try:
-                _perform_update(dialog, dev_mode=dev_mode)
+                _perform_update(dialog, dev_mode=True)  # Never install upstream Rose over OKDEV.
 
                 hash_sequence = HashCheckSequence()
                 hash_sequence.perform_hash_check(dialog, dev_mode=dev_mode)
@@ -223,7 +223,7 @@ def _run_launcher_dialog(dev_mode: bool, test_download_fail: bool) -> None:
                 skin_sequence.perform_skin_sync(dialog, test_fail=test_download_fail)
 
                 dialog.set_detail("All checks complete.")
-                dialog.set_status("Launching Rose…")
+                dialog.set_status("Launching OKDEV…")
                 dialog.set_progress(100)
                 dialog.pump_messages()
                 time.sleep(0.4)
