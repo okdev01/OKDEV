@@ -855,6 +855,8 @@
     // Create the navigation item
     const navItem = document.createElement("lol-uikit-navigation-item");
     navItem.id = `ember${Date.now()}`;
+    navItem.title = "OKDEV";
+    navItem.setAttribute("aria-label", "OKDEV settings");
     navItem.className =
       "main-navigation-menu-item menu_item_Golden Rose ember-view";
 
