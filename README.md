@@ -1,4 +1,4 @@
-# OKDEV
+﻿# OKDEV
 
 **Rose tabanlı, bağımsız sürümlenen Windows istemcisi.**
 
@@ -44,7 +44,7 @@ python scripts/build_okdev_setup.py
 
 Uygulama `dist/OKDEV/`, kurulum EXE'si `release/` altında oluşur. Inno Setup gerekmez. Party relay için `party/network/relay_config.py` içinde `RELAY_URL` ayarlanabilir; varsayılan boş bırakılır.
 
-GitHub Actions'ta **Build OKDEV** iş akışı elle çalıştırılabilir. Üretilen dosyalar önce test edilir, ardından Releases üzerinden yayımlanır. İş akışı henüz GitHub üzerinde doğrulanmamıştır.
+GitHub Actions'ta **Build OKDEV** iş akışı elle çalıştırılabilir. Üretilen dosyalar önce test edilir, ardından Releases üzerinden yayımlanır. GitHub üzerindeki Windows derlemesi ve testler başarıyla tamamlanmıştır.
 
 ## Lisans ve atıf
 
