@@ -11,6 +11,17 @@
       "sha256": "b467633d7198ce369afa03ab341957bc5adc7b06eacd2a571578240ff7f09552",
       "url": "https://github.com/okdev01/OKDEV/releases/download/mod-cj-retired-1.0.0-b467633d71/cj-retired-1.0.0.fantome",
       "image_url": "https://github.com/okdev01/OKDEV/releases/download/mod-cj-retired-1.0.0-b467633d71/cover-324c0104d5b8.webp"
+    },
+    {
+      "id": "kasap-kata",
+      "name": "KASAPINA",
+      "champion": "Katarina",
+      "description": "KASAPTINA",
+      "version": "1.0.0",
+      "champion_id": 55,
+      "sha256": "0dc59480ff12965d10b501625374fc6dbd9f9aca6bbd38a1b51474281d22533b",
+      "url": "https://github.com/okdev01/OKDEV/releases/download/mod-kasap-kata-1.0.0-0dc59480ff/kasap-kata-1.0.0.fantome",
+      "image_url": "https://github.com/okdev01/OKDEV/releases/download/mod-kasap-kata-1.0.0-0dc59480ff/cover-11b26010eb0a.webp"
     }
   ]
 }
