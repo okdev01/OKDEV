@@ -33,6 +33,17 @@
       "sha256": "d93b44d29b646596e5920fb021c6936a20ae86ad76e3eeccf74e9967ba3c9504",
       "url": "https://github.com/okdev01/OKDEV/releases/download/mod-morde-gayzer-1.0.0-d93b44d29b/morde-gayzer-1.0.0.fantome",
       "image_url": "https://github.com/okdev01/OKDEV/releases/download/mod-morde-gayzer-1.0.0-d93b44d29b/cover-11b26010eb0a.webp"
+    },
+    {
+      "id": "luci-vetti",
+      "name": "gizliLUCy",
+      "champion": "Lucian",
+      "description": "bu da olar",
+      "version": "1.0.0",
+      "champion_id": 236,
+      "sha256": "a55b6b8809a5d2b56e099df5beb285ec77f8475e01ca23335e2e113e88c8f5f0",
+      "url": "https://github.com/okdev01/OKDEV/releases/download/mod-luci-vetti-1.0.0-a55b6b8809/luci-vetti-1.0.0.fantome",
+      "image_url": "https://github.com/okdev01/OKDEV/releases/download/mod-luci-vetti-1.0.0-a55b6b8809/cover-11b26010eb0a.webp"
     }
   ]
 }
