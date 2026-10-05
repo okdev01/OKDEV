@@ -22,6 +22,17 @@
       "sha256": "0dc59480ff12965d10b501625374fc6dbd9f9aca6bbd38a1b51474281d22533b",
       "url": "https://github.com/okdev01/OKDEV/releases/download/mod-kasap-kata-1.0.0-0dc59480ff/kasap-kata-1.0.0.fantome",
       "image_url": "https://github.com/okdev01/OKDEV/releases/download/mod-kasap-kata-1.0.0-0dc59480ff/cover-11b26010eb0a.webp"
+    },
+    {
+      "id": "morde-gayzer",
+      "name": "MORDEGAYZER",
+      "champion": "Mordekaiser",
+      "description": "mordde",
+      "version": "1.0.0",
+      "champion_id": 82,
+      "sha256": "d93b44d29b646596e5920fb021c6936a20ae86ad76e3eeccf74e9967ba3c9504",
+      "url": "https://github.com/okdev01/OKDEV/releases/download/mod-morde-gayzer-1.0.0-d93b44d29b/morde-gayzer-1.0.0.fantome",
+      "image_url": "https://github.com/okdev01/OKDEV/releases/download/mod-morde-gayzer-1.0.0-d93b44d29b/cover-11b26010eb0a.webp"
     }
   ]
 }
