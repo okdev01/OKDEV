@@ -1,4 +1,16 @@
 {
   "schema": 1,
-  "mods": []
+  "mods": [
+    {
+      "id": "cj-retired",
+      "name": "RETIRED LUCIAN",
+      "champion": "Lucian",
+      "description": "TEST TO SEX",
+      "version": "1.0.0",
+      "champion_id": 236,
+      "sha256": "b467633d7198ce369afa03ab341957bc5adc7b06eacd2a571578240ff7f09552",
+      "url": "https://github.com/okdev01/OKDEV/releases/download/mod-cj-retired-1.0.0-b467633d71/cj-retired-1.0.0.fantome",
+      "image_url": "https://github.com/okdev01/OKDEV/releases/download/mod-cj-retired-1.0.0-b467633d71/cover-324c0104d5b8.webp"
+    }
+  ]
 }
