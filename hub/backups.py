@@ -16,7 +16,7 @@ def _read(backup_id):
         metadata = folder / 'metadata.json'
         if metadata.is_symlink() or metadata.stat().st_size > 128 * 1024:
             raise ValueError()
-        record = json.loads(metadata.read_text(encoding='utf-8'))
+        record = library.load_json(metadata, library.MAX_METADATA_BYTES)
         item = record['item']
         library.validate_metadata(item)
         library.mod_folder(item)
@@ -51,8 +51,10 @@ def inspect(backup_id):
     with library.mutation_lock():
         folder, item = _read(backup_id)
         files, size = _files(folder)
-        return {'id': backup_id, 'name': item['name'], 'version': item['version'],
-                'bytes': size, 'files': len(files), 'installed': item['id'] in library.installed(strict=True)}
+        installed = item['id'] in library.installed(strict=True)
+        occupied = library.mod_folder(item).exists()
+        return {'restore_conflict': 'installed' if installed else 'folder' if occupied else '', 'id': backup_id, 'name': item['name'], 'version': item['version'],
+                'bytes': size, 'files': len(files), 'installed': installed}
 
 
 def export(backup_id, destination):

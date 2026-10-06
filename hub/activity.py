@@ -1,5 +1,4 @@
 """Bounded local activity, separate from diagnostic logs and never transmitted."""
-import json
 import time
 import uuid
 
@@ -16,7 +15,7 @@ def read():
     try:
         if path.stat().st_size > 256 * 1024:
             raise ValueError()
-        events = json.loads(path.read_text(encoding='utf-8'))
+        events = library.load_json(path, 256 * 1024)
         if not isinstance(events, list) or len(events) > LIMIT:
             raise ValueError()
         for event in events:

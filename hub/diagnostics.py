@@ -1,5 +1,4 @@
 """Small, local-only checks. Reports never include credentials or raw logs."""
-import json
 import shutil
 import sys
 from datetime import datetime, timezone
@@ -14,6 +13,11 @@ def collect():
 
     def add(name, status, detail):
         checks.append({'name': name, 'status': status, 'detail': detail})
+
+    from .runtime import available_version
+    runtime_version = available_version()
+    add('WebView2 Runtime', 'ok' if runtime_version else 'warning',
+        'Kurulu sürüm: ' + runtime_version if runtime_version else 'WebView2 bulunamadı. Microsoft Edge WebView2 Evergreen Runtime kurulumunu kontrol et.')
 
     base = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parents[1]))
     for name, files in [
@@ -32,7 +36,8 @@ def collect():
             add(label, 'info', 'Henüz oluşturulmadı.')
             continue
         try:
-            value = json.loads(path.read_text(encoding='utf-8'))
+            limit = {'settings.json': library.MAX_SETTINGS_BYTES, 'catalog.json': library.MAX_CATALOG_BYTES}.get(filename, library.MAX_INDEX_BYTES)
+            value = library.load_json(path, limit)
             if not isinstance(value, dict):
                 raise ValueError()
             if filename == 'installed.json':
@@ -73,5 +78,7 @@ def collect():
             'Kısayol kullanılamıyor. Oyun rehberi sayfasından farklı bir kısayol seç.')
     else:
         add('Mobalytics rehberi', 'info', 'Etkin; rehber penceresi henüz hazır değil. Devam ederse özelliği kapatıp yeniden aç.')
+    from .storage_usage import collect as storage_usage
     return {'version': APP_VERSION, 'checked_at': datetime.now(timezone.utc).isoformat(), 'checks': checks,
+            'storage': storage_usage(),
             'note': 'Yerel dosya kontrolüdür; ağ bağlantısı veya oyun içi uyumluluk testi değildir.'}

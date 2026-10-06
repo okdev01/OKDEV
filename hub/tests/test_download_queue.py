@@ -189,7 +189,7 @@ class DownloadQueueTests(LibraryFixture):
     def test_history_read_is_bounded_before_json_parsing(self):
         path = library.root() / 'downloads.json'
         path.write_bytes(b' ' * (512 * 1024 + 1))
-        with patch('hub.downloads.json.loads') as parse:
+        with patch('hub.library.json.loads') as parse:
             queue = self.queue()
         parse.assert_not_called()
         self.assertTrue(queue.snapshot()['warning'])

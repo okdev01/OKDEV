@@ -14,9 +14,15 @@ Son 200 işlem yalnızca yerel geçmişte tutulur. Büyük kütüphanelerde kart
 
 Modlarım kategoriye ve eksik dosya durumuna göre filtrelenebilir. Görünüm dışında kalan toplu seçimlerin sayısı belirtilir; arka plan yenilemelerinde klavye odağı korunur. Profil ve destek raporu dışa aktarımları canlı kullanıcı verisinin üzerine yazamaz.
 
+Yerel paket mevcut mod kimliğini kullanıyorsa eski ve yeni sürüm onaydan önce gösterilir. Güncelleme eski dosyaları yedekler; önizleme sırasında mod değişmişse güncel onay istenir. Bozuk veya aşırı büyümüş yerel kayıtlar özgün dosya korunarak bildirilir. Bildirimler klavyeyle veya kapatma düğmesiyle kapatılabilir.
+
 Kurulum güncellemesi klasör değişimi sırasında kesilirse, **Setup veya güncellemeyi aynı hedef klasöre yeniden çalıştırmak** önce yarım işlemi kurtarır. Eski kurulumun yedeği korunur; işlem sonrasında dışarıdan değiştirilmiş klasörlerin üzerine yazılmaz. Bu kurtarma yeni sürümün oluşturduğu işlem kayıtları için geçerlidir.
 
 Windows kullanıcı ve oyun klasörü adlarındaki Unicode karakterler ile `%` işareti ayarlarda korunur. Ayar değişiklikleri birlikte çalışan OKDEV süreçleri arasında sıraya alınır. Kalıcı dosya kilidinde eski ayar dosyası korunur; bozuk bir dosya tek ayarla yeniden oluşturulmaz.
+
+Mod Merkezi ve rehber, Microsoft Edge WebView2 Runtime kullanır. Bileşen bulunamazsa Mod Merkezi boş pencere yerine kurulum açıklaması gösterir; yalnızca kullanıcı seçerse [Microsoft’un resmi indirme sayfasını](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) açar. Uygulama bu bileşeni kendiliğinden indirmez veya kurmaz. Sistem durumu kurulu Runtime sürümünü gösterir.
+
+**Sistem durumu → Depolama kullanımı** mod dosyaları, yerel yedekler, geçici indirmeler ve önbellekleri ayrı gösterir. Dosyalar silinmez. Büyük veya erişilemeyen klasörler süre/dosya sınırıyla taranır; eksik ölçümler “En az” olarak belirtilir. Tek düğmeyle yedek listesine gidilebilir.
 
 Ek kontroller:
 
@@ -25,6 +31,8 @@ python -m unittest discover -v
 node test/professional_dom.cjs
 python scripts/check_hub_endurance.py --duration 3600 --interval 15
 python scripts/check_hub_webview.py --soak-seconds 10800
+python scripts/check_hub_webview.py --zoom-check --accessibility --capture
+python scripts/check_library_model.py --duration 5400 --interval 0.5
 ```
 
 Dayanıklılık kontrolü geçici kullanıcı verisi ve yalnızca `127.0.0.1` test sunucusu kullanır. İndirme hatası/yeniden deneme, seçim geri alma, profil, kaldırma ve geri yükleme döngülerini; bellek, iş parçacığı ve açık dosya sayısını kaydeder. Sonuçlar ve sınanan kaynakların SHA-256 değerleri `build/hub-endurance.json` dosyasındadır. Oyun içi uyumluluk kontrolünün yerini almaz.

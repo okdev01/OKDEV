@@ -18,6 +18,7 @@ from . import guides, library, preferences
 _process = None
 _last_start = 0
 _start_lock = threading.Lock()
+_MUTEX_NAME = r'Local\OKDEV-GuideCompanion'
 HOTKEYS = {'Ctrl+Shift+B': (0x0002 | 0x0004, 0x42), 'Ctrl+Shift+M': (0x0002 | 0x0004, 0x4D), 'Alt+B': (0x0001, 0x42)}
 
 
@@ -158,13 +159,20 @@ def run():
     kernel.CreateMutexW.argtypes = (ctypes.c_void_p, wintypes.BOOL, wintypes.LPCWSTR)
     kernel.CreateMutexW.restype = wintypes.HANDLE
     kernel.CloseHandle.argtypes = (wintypes.HANDLE,)
-    mutex = kernel.CreateMutexW(None, False, r'Local\OKDEV-GuideCompanion')
+    mutex = kernel.CreateMutexW(None, False, _MUTEX_NAME)
     if not mutex:
         return
     if ctypes.get_last_error() == 183:
         kernel.CloseHandle(mutex)
         return
     if not preferences.get()['mobalytics_enabled']:
+        kernel.CloseHandle(mutex)
+        return
+    from .runtime import available_version
+    if not available_version():
+        library.write_json(library.root() / 'companion-status.json', {
+            'running': False, 'visible': False, 'hotkey_ok': False, 'updated_at': time.time(),
+            'error': 'Rehber için Microsoft Edge WebView2 Runtime gerekiyor. Rehberi tarayıcıda açabilir veya Runtime kurulumunu kontrol edebilirsin.'})
         kernel.CloseHandle(mutex)
         return
     machine = WindowState()

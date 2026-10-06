@@ -17,6 +17,10 @@ from utils.core.paths import get_user_data_dir
 
 CATALOG_URL = 'https://raw.githubusercontent.com/okdev01/OKDEV/main/mods/catalog.json'
 MAX_DOWNLOAD = 512 * 1024 * 1024
+MAX_INDEX_BYTES = 32 * 1024 * 1024
+MAX_CATALOG_BYTES = 4 * 1024 * 1024
+MAX_SETTINGS_BYTES = 1024 * 1024
+MAX_METADATA_BYTES = 128 * 1024
 CATEGORIES = {'skins': 'Şampiyon', 'ui': 'HUD / Arayüz', 'maps': 'Harita',
               'fonts': 'Yazı tipi', 'announcers': 'Spiker'}
 _lock = threading.RLock()
@@ -49,9 +53,28 @@ def root():
     return folder
 
 
+def load_json(path, limit=MAX_CATALOG_BYTES):
+    """Read bounded local state; malformed input never escapes as recursion errors.
+
+    Limit the actual read, not just stat(), because another process can replace
+    or grow a file between those operations. Callers decide whether to display
+    defaults or refuse a mutation, preserving the original file in either case.
+    """
+    if path.stat().st_size > limit:
+        raise ValueError('Kayıt dosyası boyut sınırını aşıyor.')
+    with path.open('rb') as stream:
+        content = stream.read(limit + 1)
+    if len(content) > limit:
+        raise ValueError('Kayıt dosyası boyut sınırını aşıyor.')
+    try:
+        return json.loads(content.decode('utf-8'))
+    except RecursionError:
+        raise ValueError('Kayıt dosyasının yapısı geçersiz.') from None
+
+
 def read_json(path, default):
     try:
-        value = json.loads(path.read_text(encoding='utf-8'))
+        value = load_json(path)
         return value if isinstance(value, type(default)) else default
     except (OSError, ValueError):
         return default
@@ -68,7 +91,7 @@ def _settings_data(strict=False):
     if not path.exists():
         return {}
     try:
-        data = json.loads(path.read_text(encoding='utf-8'))
+        data = load_json(path, MAX_SETTINGS_BYTES)
         if (not isinstance(data, dict)
                 or ('auto_accept' in data and type(data['auto_accept']) is not bool)
                 or ('favorites' in data and (not isinstance(data['favorites'], list)
@@ -161,7 +184,7 @@ def catalog(refresh=False, allow_network=True):
     path = root() / 'catalog.json'
     error = ''
     try:
-        data = validate_catalog(json.loads(path.read_text(encoding='utf-8')))
+        data = validate_catalog(load_json(path, MAX_CATALOG_BYTES))
         stale = time.time() - path.stat().st_mtime > 300
     except (OSError, ValueError, TypeError):
         data, stale = {'schema': 1, 'mods': []}, True
@@ -174,7 +197,7 @@ def catalog(refresh=False, allow_network=True):
                     write_json(path, data)
                     return validate_catalog(data), 'Kütüphane henüz yayımlanmadı. Yerel mod içe aktarabilirsiniz.'
                 response.raise_for_status()
-                limit = 4 * 1024 * 1024
+                limit = MAX_CATALOG_BYTES
                 length = response.headers.get('Content-Length', '')
                 if isinstance(length, str) and length.isdigit() and int(length) > limit:
                     raise ValueError('Katalog çok büyük')
@@ -186,7 +209,7 @@ def catalog(refresh=False, allow_network=True):
                 fresh = validate_catalog(json.loads(content))
             write_json(path, fresh)
             data = fresh
-        except (requests.RequestException, ValueError, OSError):
+        except (requests.RequestException, ValueError, OSError, RecursionError):
             error = 'Kataloğa ulaşılamadı. Kaydedilen kütüphane gösteriliyor.'
     return validate_catalog(data), error
 
@@ -196,19 +219,22 @@ def installed(strict=False):
     if not path.exists():
         return {}
     try:
-        data = json.loads(path.read_text(encoding='utf-8'))
+        data = load_json(path, MAX_INDEX_BYTES)
         if not isinstance(data, dict):
             raise ValueError('Invalid index')
-        valid = {}
+        valid, folders = {}, set()
         for key, item in data.items():
             try:
                 if not isinstance(item, dict) or item.get('id') != key or not valid_id(key):
                     raise ValueError('Invalid entry')
                 validate_metadata(item)
-                mod_folder(item)
+                folder = mod_folder(item)
+                if folder in folders:
+                    raise ValueError('Two mod records share one folder')
                 if not isinstance(item.get('folder_name'), str) or type(item.get('enabled')) is not bool:
                     raise ValueError('Invalid entry')
                 valid[key] = item
+                folders.add(folder)
             except (ValueError, OSError):
                 if strict:
                     raise ValueError('Mod kayıtlarında sorun var. Tanılama ekranını kontrol edin; kayıt dosyası korunuyor.')
@@ -317,7 +343,11 @@ def _is_ritobin_source(archive, entry, members):
     return False
 
 
-def import_archive(path, item):
+def import_revision(item):
+    return hashlib.sha256(json.dumps(item or None, sort_keys=True, ensure_ascii=True).encode('utf-8')).hexdigest()
+
+
+def import_archive(path, item, expected_revision=None):
     from injection.mods.storage import ModStorageService
     path = Path(path)
     validate_metadata(item)
@@ -325,6 +355,8 @@ def import_archive(path, item):
     with mutation_lock():
         data = installed(strict=True)
         previous = data.get(item['id'], {})
+        if expected_revision is not None and expected_revision != import_revision(previous):
+            raise ValueError('Bu mod önizlemeden sonra değişti. Güncel sürümü kontrol edip yeniden ekle.')
         if previous and (previous.get('champion_id') != item.get('champion_id') or previous.get('category', 'skins') != item.get('category', 'skins')):
             raise ValueError('Bu mod kimliği başka bir şampiyona ait. Farklı bir mod kimliği seçin.')
         service = ModStorageService()
@@ -523,7 +555,7 @@ def removed():
     result = []
     for path in (root() / 'removed').glob('*/metadata.json'):
         try:
-            record = json.loads(path.read_text(encoding='utf-8'))
+            record = load_json(path, MAX_METADATA_BYTES)
             item = record['item']
             validate_metadata(item)
             mod_folder(item)
@@ -546,14 +578,16 @@ def restore(backup_id):
         data = installed(strict=True)
         backup = root() / 'removed' / backup_id
         try:
-            record = json.loads((backup / 'metadata.json').read_text(encoding='utf-8'))
+            record = load_json(backup / 'metadata.json', MAX_METADATA_BYTES)
             item = record['item']
             validate_metadata(item)
             folder = mod_folder(item)
         except (OSError, ValueError, TypeError, KeyError):
             raise ValueError('Yedek kaydı okunamadı') from None
-        if item['id'] in data or folder.exists():
-            raise ValueError('Bu mod veya klasör zaten mevcut. Mevcut dosyaların üzerine yazılmadı.')
+        if item['id'] in data:
+            raise ValueError('Bu mod zaten mevcut. Önce mevcut sürümü kaldırarak yedekle; sonra istediğin yedeği geri yükle.')
+        if folder.exists():
+            raise ValueError('Önceki klasör başka dosyalar içeriyor. Yedeği incele → Paket olarak kaydet ile dışa aktarıp yeniden içe aktar. Mevcut dosyalar korundu.')
         source = (backup / 'mod').resolve()
         if not source.is_relative_to((root() / 'removed').resolve()) or not source.is_dir():
             raise ValueError('Yedek dosyaları bulunamadı')

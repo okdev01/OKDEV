@@ -95,9 +95,26 @@ if (typeof document !== 'undefined') {
   }
   function notify(message, error = false, persistent = false) {
     clearTimeout(noticeTimer);
-    $('status').textContent = message;
-    $('status').className = 'status' + (error ? ' error' : '');
-    if (!persistent && !error) noticeTimer = setTimeout(() => $('status').textContent = '', 6000);
+    const status = $('status'), previousFocus = document.activeElement;
+    status.replaceChildren();
+    status.className = 'status' + (error ? ' error' : '');
+    if (!message) return;
+    const dismiss = element('button', 'dismiss-notice', '×');
+    dismiss.type = 'button'; dismiss.setAttribute('aria-label', 'Bildirimi kapat');
+    dismiss.onclick = () => {
+      const restore = status.contains(document.activeElement);
+      clearTimeout(noticeTimer); status.replaceChildren();
+      if (restore) {
+        const target = previousFocus?.isConnected && previousFocus !== document.body
+          && !previousFocus.closest('[hidden]') && !previousFocus.disabled ? previousFocus : $('title');
+        if (target === $('title')) target.tabIndex = -1;
+        target.focus({preventScroll:true});
+      }
+    };
+    status.append(element('span', 'status-message', message), dismiss);
+    if (!persistent && !error) noticeTimer = setTimeout(() => {
+      if (!status.contains(document.activeElement)) status.replaceChildren();
+    }, 6000);
   }
   function lock() {
     document.querySelectorAll('[data-api]').forEach(e => e.disabled = busy || !api);
@@ -532,7 +549,7 @@ if (typeof document !== 'undefined') {
         backupDialog.dataset.backupId = info.id;
         backupTitle.textContent = info.name + ' · v' + info.version;
         backupSummary.textContent = info.files + ' dosya · ' + HubView.bytes(info.bytes);
-        backupNote.textContent = info.installed ? 'Bu mod şu anda kütüphanende var. Önce mevcut sürümü kaldırarak yedekle; sonra istediğin eski sürümü geri yükleyebilirsin.' : 'Geri yüklediğinde mod kapalı olarak eklenir. Dışa aktararak başka bir konumda da saklayabilirsin.';
+        backupNote.textContent = info.installed ? 'Bu mod şu anda kütüphanende var. Önce mevcut sürümü kaldırarak yedekle; sonra istediğin eski sürümü geri yükleyebilirsin.' : info.restore_conflict === 'folder' ? 'Bu yedeğin eski klasörü şu anda başka dosyalar içeriyor. Paket olarak kaydet ile dışa aktar, ardından Mod dosyası ekle ile yeniden içe aktar. Yeni klasör seçilir; mevcut dosyalar korunur.' : 'Geri yüklediğinde mod kapalı olarak eklenir. Dışa aktararak başka bir konumda da saklayabilirsin.';
         backupDialog.showModal();
       }}), {remote:true}));
       recovery.append(row);
@@ -593,6 +610,18 @@ if (typeof document !== 'undefined') {
   const backupActions = element('div', 'form-footer');
   backupActions.append(button('Kapat', () => backupDialog.close()), button('Paket olarak kaydet', () => act(() => api.export_backup(backupDialog.dataset.backupId), '', {refresh:false, after: result => { if (result?.saved) notify('Yedek paket kaydedildi. Mod dosyası ekle ile yeniden içe aktarabilirsin.'); }}), {primary:true,remote:true}));
   backupDialog.append(backupTitle, backupSummary, backupNote, backupActions); document.body.append(backupDialog);
+  const importReplaceDialog = element('dialog'); importReplaceDialog.id = 'importReplaceDialog';
+  const importReplaceTitle = element('h2', '', 'Mevcut mod güncellenecek'), importReplaceSummary = element('p');
+  const importReplaceNote = element('p', 'subtle', 'Mevcut dosyalar sürüm yedeği olarak saklanır. Etkinlik seçimin korunur. Ayrı bir mod eklemek istiyorsan vazgeçip Gelişmiş alanlardan mod kimliğini değiştir.');
+  const importReplaceActions = element('div', 'form-footer');
+  let pendingImport = null;
+  importReplaceDialog.addEventListener('close', () => { pendingImport = null; });
+  importReplaceActions.append(button('Vazgeç', () => importReplaceDialog.close()), button('Yedekleyerek güncelle', () => {
+    if (!pendingImport) return;
+    const pending = pendingImport;
+    act(() => api.import_mod(pending.fields, pending.revision), 'Mod güncellendi. Önceki sürüm yedeklerde saklandı.', {after: () => { importReplaceDialog.close(); page('installed'); }});
+  }, {primary:true,remote:true}));
+  importReplaceDialog.append(importReplaceTitle, importReplaceSummary, importReplaceNote, importReplaceActions); document.body.append(importReplaceDialog);
   document.querySelectorAll('dialog').forEach(dialog => {
     const heading = dialog.querySelector('h2');
     if (heading && !dialog.hasAttribute('aria-labelledby')) {
@@ -686,7 +715,20 @@ if (typeof document !== 'undefined') {
   $('resetForm').onclick = () => act(() => api.prepare_import(null), 'Form temizlendi.', {refresh: false, after: () => {
     sourceId = null; $('modForm').reset(); $('selected').textContent = 'Dosya seçilmedi'; $('coverName').textContent = 'İsteğe bağlı'; $('importSource').textContent = ''; updateCategory();
   }});
-  $('modForm').onsubmit = e => { e.preventDefault(); const fields = Object.fromEntries(new FormData(e.target)); act(() => api.import_mod(fields), 'Mod eklendi. Etkinleştirmek için seçimini aç.', {after: () => page('installed')}); };
+  $('modForm').onsubmit = async e => {
+    e.preventDefault(); const fields = Object.fromEntries(new FormData(e.target));
+    let preview;
+    if (api?.preview_import) {
+      const valid = await act(() => api.preview_import(fields), '', {refresh:false, after: value => { preview = value; }});
+      if (!valid || !preview) return;
+      if (preview.existing) {
+        pendingImport = {fields, revision:preview.revision};
+        importReplaceSummary.textContent = preview.existing.name + ' · v' + preview.existing.version + ' → ' + preview.name + ' · v' + preview.version;
+        importReplaceDialog.showModal(); return;
+      }
+    }
+    act(() => api.import_mod(fields, preview?.revision), 'Mod eklendi. Etkinleştirmek için seçimini aç.', {after: () => page('installed')});
+  };
   $('modForm').addEventListener('invalid', e => { if ($('importAdvanced').contains(e.target)) $('importAdvanced').open = true; }, true);
   $('publishMod').onclick = () => {
     if (!$('modForm').reportValidity() || sourceId) return;
@@ -710,9 +752,17 @@ if (typeof document !== 'undefined') {
   $('exportDiagnostics').onclick = () => act(() => api.export_diagnostics(), '', {refresh: false, after: result => { if (result.saved) notify('Destek raporu kaydedildi. İstersen destek alırken paylaşabilirsin.'); }});
   $('checkDiagnostics').onclick = () => act(() => api.diagnostics(), 'Kontroller tamamlandı.', {refresh: false, after: report => {
     $('diagnosticsTime').textContent = 'OKDEV ' + report.version + ' · ' + new Date(report.checked_at).toLocaleString('tr') + ' · ' + report.note;
+    const storage = $('storageGrid'); storage.replaceChildren();
+    for (const item of report.storage || []) {
+      const card = element('div', 'storage-card');
+      card.append(element('h3', '', item.name), element('strong', '', (item.complete ? '' : 'En az ') + HubView.bytes(item.bytes)), element('span', 'subtle', item.files.toLocaleString('tr') + ' dosya'));
+      storage.append(card);
+    }
+    $('storageSummary').hidden = !storage.children.length;
     const target = $('diagnosticsGrid'); target.replaceChildren();
     report.checks.forEach(c => { const panel = element('article', 'panel diagnostic ' + c.status); panel.append(element('span', 'badge', {ok: 'Hazır', warning: 'Kontrol gerekli', info: 'Bilgi'}[c.status]), element('h3', '', c.name), element('p', '', c.detail)); target.append(panel); });
   }});
+  $('showStorageBackups').onclick = () => { page('installed'); $('recovery').open = true; $('recovery').querySelector('summary').focus(); $('recovery').scrollIntoView({block:'center'}); };
   $('cancelRemove').onclick = () => $('removeDialog').close();
   $('cancelDownload').onclick = async () => {
     $('cancelDownload').disabled = true;

@@ -64,6 +64,25 @@ const change=async (id,value)=>{const el=$(id);if(el.type==='checkbox')el.checke
     assert.equal($('modForm').elements.namedItem('name').value,'Fixture');
     $('modForm').dispatchEvent(new window.Event('submit',{cancelable:true}));await settle();
     assert.ok(calls.some(c=>c[0]==='import_mod'&&c[1].champion_id==='11'));
+    api.preview_import=async()=>({ok:true,result:{name:'Fixture',version:'2.0.0',existing:{name:'Fixture',version:'1.0.0',enabled:true},revision:'reviewed-import'}});
+    await click('#quickImport');
+    const beforeReplacement=calls.filter(c=>c[0]==='import_mod').length;
+    $('modForm').dispatchEvent(new window.Event('submit',{cancelable:true}));await settle();
+    assert.equal($('importReplaceDialog').open,true);
+    assert.match($('importReplaceDialog').textContent,/v1.0.0 → Fixture · v2.0.0/);
+    assert.equal(calls.filter(c=>c[0]==='import_mod').length,beforeReplacement,'Preview never updates a mod');
+    await click([...document.querySelectorAll('#importReplaceDialog button')].find(e=>e.textContent==='Vazgeç'));
+    assert.equal(calls.filter(c=>c[0]==='import_mod').length,beforeReplacement,'Cancel preserves current version');
+    $('modForm').dispatchEvent(new window.Event('submit',{cancelable:true}));await settle();
+    await click('#importReplaceDialog .primary');
+    assert.equal(calls.filter(c=>c[0]==='import_mod').at(-1)[2],'reviewed-import');
+    assert.equal($('importReplaceDialog').open,false);
+    api.preview_import=async()=>({ok:true,result:{name:'New',version:'1.0.0',existing:null,revision:'new-import'}});
+    await click('#quickImport');
+    $('modForm').dispatchEvent(new window.Event('submit',{cancelable:true}));await settle();
+    assert.equal(calls.filter(c=>c[0]==='import_mod').at(-1)[2],'new-import');
+    assert.equal($('importReplaceDialog').open,false,'New mods do not require a replacement dialog');
+
     await click('[data-page="guides"]');assert.equal($('showCurrentGuide').disabled,true);
     await change('guideEnabled',true);assert.equal(prefs.mobalytics_enabled,true);
     await change('guideSize','compact');assert.equal(prefs.mobalytics_size,'compact');

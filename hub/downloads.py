@@ -5,7 +5,6 @@ is shown as interrupted, never silently restarted. The record contains no URLs,
 credentials, absolute paths, or raw exception messages.
 """
 import copy
-import json
 import math
 import shutil
 import threading
@@ -42,7 +41,7 @@ class DownloadQueue:
         try:
             if self._path.stat().st_size > 512 * 1024:
                 raise ValueError()
-            payload = json.loads(self._path.read_text(encoding='utf-8'))
+            payload = library.load_json(self._path, 512 * 1024)
             if not isinstance(payload, dict) or type(payload.get('schema')) is not int or payload['schema'] != 1:
                 raise ValueError()
             jobs = payload.get('jobs')

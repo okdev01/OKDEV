@@ -41,3 +41,11 @@ class PackageInfoTests(LibraryFixture):
         info = inspect(path)['suggested']
         self.assertEqual(info['version'], '16.18.2.85.4133')
         self.assertEqual(info['champion_id'], 103)
+
+    def test_invalid_optional_backup_category_never_blocks_file_selection(self):
+        for value in ([], {}, True, None):
+            with self.subTest(category=value):
+                path = self.archive(files={'META/okdev-backup.json':json.dumps({'category':value,'name':'Backup'}), 'WAD/UI.wad.client':b'fixture'})
+                result = inspect(path)
+                self.assertEqual(result['suggested']['name'], 'Backup')
+                self.assertNotIn('category', result['suggested'])

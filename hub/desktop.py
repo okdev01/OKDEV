@@ -492,8 +492,19 @@ class Api:
         self._cover = Path(paths[0])
         return self._cover.name
 
-    def import_mod(self, fields):
-        return self._run(lambda: library.import_archive(self._selected, self._item(fields)))
+    def preview_import(self, fields):
+        def action():
+            item = self._item(fields)
+            previous = library.installed(strict=True).get(item['id'])
+            if previous and (previous.get('champion_id') != item.get('champion_id')
+                    or previous.get('category', 'skins') != item.get('category', 'skins')):
+                raise ValueError('Bu mod kimliği başka bir şampiyon veya kategoriye ait. Gelişmiş alanlardan farklı bir mod kimliği seç.')
+            return {'name': item['name'], 'version': item['version'], 'revision': library.import_revision(previous),
+                    'existing': {key: previous[key] for key in ('name', 'version', 'enabled')} if previous else None}
+        return self._run(action)
+
+    def import_mod(self, fields, expected_revision=None):
+        return self._run(lambda: library.import_archive(self._selected, self._item(fields), expected_revision))
 
     def publish_mod(self, fields, token):
         from .publisher import publish
@@ -512,6 +523,13 @@ class Api:
 
 
 def run(smoke_path=None):
+    from . import runtime
+    if not runtime.available_version():
+        if smoke_path:
+            Path(smoke_path).write_text(json.dumps({'ok': False, 'error': 'Microsoft Edge WebView2 Runtime bulunamadı.'}), encoding='utf-8')
+        else:
+            runtime.show_missing_runtime()
+        return
     if smoke_path:
         import tempfile
         from utils.core import paths
@@ -523,7 +541,10 @@ def run(smoke_path=None):
                 return _run_window(smoke_path)
         finally:
             paths._cached_user_data_dir, paths._migration_checked = previous, migrated
-    return _run_window()
+    try:
+        return _run_window()
+    except Exception:
+        runtime.show_startup_error()
 
 
 def _run_window(smoke_path=None):

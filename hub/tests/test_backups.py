@@ -86,3 +86,20 @@ class BackupTests(LibraryFixture):
         backup_id = self.make_backup()
         library.import_archive(self.archive(), self.item())
         self.assertTrue(backups.inspect(backup_id)['installed'])
+
+    def test_reused_folder_reports_export_route_without_touching_either_payload(self):
+        backup_id = self.make_backup()
+        other = library.import_archive(self.archive(), self.item('other'))
+        info = backups.inspect(backup_id)
+        self.assertFalse(info['installed'])
+        self.assertEqual(info['restore_conflict'], 'folder')
+        with self.assertRaisesRegex(ValueError, 'Paket olarak kaydet'):
+            library.restore(backup_id)
+        self.assertEqual((library.mod_folder(other) / 'WAD/Ahri.wad.client').read_bytes(), b'fixture-wad-data')
+        self.assertEqual(len(library.removed()), 1)
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / 'restored.fantome'
+            backups.export(backup_id, output)
+            restored = library.import_archive(output, self.item())
+        self.assertNotEqual(restored['relative_path'], other['relative_path'])
+        self.assertEqual(len(library.installed()), 2)

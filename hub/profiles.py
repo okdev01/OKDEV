@@ -1,5 +1,4 @@
 """Named sets of installed mod selections; files are never copied into profiles."""
-import json
 import time
 import uuid
 
@@ -11,7 +10,7 @@ def list_profiles(strict=False):
     if not path.exists():
         return {}
     try:
-        data = json.loads(path.read_text(encoding='utf-8'))
+        data = library.load_json(path, library.MAX_INDEX_BYTES)
         if not isinstance(data, dict) or len(data) > 100:
             raise ValueError()
         for key, profile in data.items():

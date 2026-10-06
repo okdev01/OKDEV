@@ -21,6 +21,7 @@ const ok = value => ({ok:true,result:value});
 const record = name => async (...args) => {calls.push([name,...args]);return ok();};
 const api = {
   snapshot:async()=>structuredClone(state),
+  diagnostics:async()=>ok({version:'1.5.0',checked_at:new Date().toISOString(),note:'Local check',checks:[],storage:[{id:'mods',name:'Mod dosyaları',bytes:2048,files:2,complete:true},{id:'backups',name:'Yerel yedekler',bytes:4096,files:4,complete:false}]}),
   guide_state:async()=>({guide:{},companion:{},preferences:state.preferences}),
   cover_previews:async ids=>{calls.push(['covers',ids]);return Object.fromEntries(ids.map(id=>[id,{key:installed[id].cover_key,data:'data:image/jpeg;base64,fixture'}]));},
   enqueue_download:async(id,source)=>{calls.push(['enqueue',id,source]);const job={id:'job-1',mod_id:id,name:'Queued fixture',status:'queued',received:0,total:0};state.downloads.jobs.push(job);return ok(job);},
@@ -94,6 +95,12 @@ const named=(host,name)=>[...document.querySelectorAll(host+' button')].find(but
     state.downloads.jobs=[];await intervals.find(item=>item.ms===1000).callback();
     await click('[data-page="library"]');await click('#catalogGrid .primary');
     assert.ok(calls.some(c=>c[0]==='enqueue'&&c[2]==='curated'));
+    assert.match($('status').textContent,/indirme kuyruğuna eklendi/);
+    const dismissNotice = document.querySelector('#status .dismiss-notice');
+    assert.equal(dismissNotice.getAttribute('aria-label'),'Bildirimi kapat');
+    dismissNotice.focus(); await click(dismissNotice);
+    assert.equal($('status').textContent,'');
+    assert.notEqual(document.activeElement,document.body,'Dismissing a focused notice restores a useful focus target');
     assert.equal($('main').getAttribute('aria-busy'),'false');
     await click('[data-page="downloads"]');assert.equal(document.querySelectorAll('.download-job.queued').length,1);
     await click('.job-actions button');assert.equal(document.querySelectorAll('.download-job.cancelled').length,1);
@@ -144,7 +151,15 @@ const named=(host,name)=>[...document.querySelectorAll(host+' button')].find(but
     const applies=calls.filter(c=>c[0]==='apply').length;await click('#profileCards .primary');assert.equal(calls.filter(c=>c[0]==='apply').length,applies);
     await click('#profileCards .profile-card-heading button');await click(named('#editProfileDialog','Profil dosyasını dışa aktar'));
     assert.ok(calls.some(c=>c[0]==='export-profile'&&c[1]==='portable'));
-    $('editProfileDialog').close();window.dispatchEvent(new window.Event('okdev-close-request'));assert.equal($('closeWindowDialog').open,true);
+    $('editProfileDialog').close();
+    await click('[data-page="diagnostics"]');await click('#checkDiagnostics');
+    assert.equal($('storageSummary').hidden,false);
+    assert.equal(document.querySelectorAll('.storage-card').length,2);
+    assert.match($('storageGrid').textContent,/En az 4.0 KB/,'Incomplete scan is explicitly a lower bound');
+    await click('#showStorageBackups');
+    assert.equal($('installed').hidden,false);assert.equal($('recovery').open,true);
+    assert.equal(document.activeElement,document.querySelector('#recovery summary'));
+    window.dispatchEvent(new window.Event('okdev-close-request'));assert.equal($('closeWindowDialog').open,true);
     assert.ok([...document.querySelectorAll('dialog')].filter(dialog=>dialog.querySelector('h2')).every(dialog=>document.getElementById(dialog.getAttribute('aria-labelledby'))),'Every dialog has an accessible heading');
     await click('#minimizeWindow');assert.ok(calls.some(c=>c[0]==='minimize'));assert.equal($('closeWindowDialog').open,false);
     window.dispatchEvent(new window.Event('okdev-close-request'));await click('#stopAndClose');assert.ok(calls.some(c=>c[0]==='close'));

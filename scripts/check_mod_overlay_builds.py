@@ -23,6 +23,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--game-dir', required=True, type=Path)
     parser.add_argument('--id', action='append')
+    parser.add_argument('--cache', type=Path, default=ROOT / 'downloads/community')
+    parser.add_argument('--report', type=Path, default=ROOT / 'build/mod-overlay-build-check.json')
     args = parser.parse_args()
     game = args.game_dir.resolve()
     if not (game / 'League of Legends.exe').is_file():
@@ -39,7 +41,7 @@ def main():
             import psutil
             if any((p.info['name'] or '').lower() == 'league of legends.exe' for p in psutil.process_iter(['name'])):
                 raise RuntimeError('Game is running; stop the offline overlay test')
-            package = ROOT / 'downloads/community' / (item['id'] + '.fantome')
+            package = args.cache / (item['id'] + '.fantome')
             with package.open('rb') as stream:
                 assert hashlib.file_digest(stream, 'sha256').hexdigest() == item['sha256'], 'Package hash mismatch'
             library.validate_archive(package)
@@ -63,7 +65,8 @@ def main():
     report = {'ok': bool(results) and unchanged and all(r['ok'] for r in results), 'game_files_unchanged': unchanged,
         'game_wads_checked': len(original), 'results': results,
         'scope': 'Offline mod-tools mkoverlay only; no patcher or game process. This is not a live match or visual compatibility test.'}
-    (ROOT / 'build/mod-overlay-build-check.json').write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
+    args.report.parent.mkdir(parents=True, exist_ok=True)
+    args.report.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
     return 0 if report['ok'] else 1
 
 

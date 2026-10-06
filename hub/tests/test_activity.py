@@ -40,7 +40,7 @@ class ActivityTests(LibraryFixture):
 
     def test_oversized_history_does_not_parse(self):
         (library.root() / 'activity.json').write_bytes(b' ' * (256 * 1024 + 1))
-        with patch('hub.activity.json.loads') as parse:
+        with patch('hub.library.json.loads') as parse:
             result = activity.read()
         parse.assert_not_called()
         self.assertTrue(result['warning'])

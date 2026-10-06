@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -156,3 +157,33 @@ transaction.commit(root/'OKDEV',root/'.okdev-update-abcdef123456',root/'OKDEV.ba
             transaction.commit(self.target, self.prepared, self.backup)
         self.assertEqual((self.backup / 'personal.txt').read_text(), 'keep')
         self.assertEqual((self.target / 'OKDEV.exe').read_bytes(), b'old')
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows paths are case-insensitive')
+    def test_recovery_accepts_same_windows_target_with_different_case(self):
+        self.journal()
+        self.target.rename(self.backup)
+        alternate = self.target.with_name('okdev')
+        with transaction.installation_lock(alternate):
+            result = transaction.recover(alternate)
+        self.assertEqual(result['status'], 'rolled_back')
+        self.assertEqual((self.target / 'OKDEV.exe').read_bytes(), b'old')
+        self.assertTrue(self.prepared.exists())
+
+    def test_deeply_nested_journal_does_not_escape_recovery_as_recursion_error(self):
+        path = transaction.journal_path(self.target)
+        content = '[' * 3000 + '0' + ']' * 3000
+        path.write_text(content, encoding='utf-8')
+        with self.assertRaises(ValueError):
+            self.recover()
+        self.assertEqual(path.read_text(encoding='utf-8'), content)
+        self.assertEqual((self.target / 'OKDEV.exe').read_bytes(), b'old')
+
+    def test_deeply_nested_metadata_blocks_commit_without_moving_folders(self):
+        path = self.prepared / 'okdev-install.json'
+        content = '[' * 3000 + '0' + ']' * 3000
+        path.write_text(content, encoding='utf-8')
+        with self.assertRaises(ValueError):
+            transaction.commit(self.target, self.prepared, self.backup)
+        self.assertEqual(path.read_text(encoding='utf-8'), content)
+        self.assertTrue(self.target.exists())
+        self.assertFalse(self.backup.exists())

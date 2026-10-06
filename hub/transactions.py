@@ -4,7 +4,6 @@ The atomic installed.json entry is the commit point. Before it changes, recovery
 restores the old placement; after it changes, recovery completes the placement.
 New imports whose index never committed are retained as recoverable backups.
 """
-import json
 import re
 import time
 import uuid
@@ -115,7 +114,7 @@ def recover_pending():
                 raise ValueError('İşlem kaydı geçersiz.')
             if path.is_symlink() or path.resolve().parent != folder.resolve():
                 raise ValueError('İşlem dosyasının yolu geçersiz.')
-            record = _validate(json.loads(path.read_text(encoding='utf-8')))
+            record = _validate(library.load_json(path, library.MAX_METADATA_BYTES))
             data = library.installed(strict=True)
             current = data.get(record['mod_id'])
             before, after = record['before'], record['after']

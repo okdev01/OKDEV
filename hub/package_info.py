@@ -32,7 +32,7 @@ def inspect(path):
                     if isinstance(raw, dict):
                         if info.filename.lower() == 'meta/okdev-backup.json':
                             from .library import CATEGORIES
-                            if raw.get('category') in CATEGORIES:
+                            if isinstance(raw.get('category'), str) and raw['category'] in CATEGORIES:
                                 suggested['category'] = raw['category']
                         for key, limit in [('name', 100), ('description', 2000), ('author', 100)]:
                             value = raw.get(key.title(), raw.get(key))

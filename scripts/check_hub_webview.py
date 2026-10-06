@@ -25,9 +25,12 @@ def main():
     import argparse
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--capture', action='store_true')
+    parser.add_argument('--zoom-check', action='store_true')
+    parser.add_argument('--report', type=Path, default=ROOT / 'build/hub-webview-check.json')
     parser.add_argument('--accessibility', action='store_true')
     parser.add_argument('--keep-open', action='store_true')
     parser.add_argument('--soak-seconds', type=int, default=0)
+    parser.add_argument('--soak-report', type=Path)
     options = parser.parse_args()
     if not 0 <= options.soak_seconds <= 24 * 3600:
         parser.error('--soak-seconds must be between 0 and 86400')
@@ -87,6 +90,7 @@ def main():
             from System import Func, Object
             from System.IO import FileStream, FileMode
             from Microsoft.Web.WebView2.Core import CoreWebView2CapturePreviewImageFormat
+            time.sleep(.25)  # Let the page-entry transition reach its final frame.
             folder = ROOT / 'build/ui-preview'
             folder.mkdir(parents=True, exist_ok=True)
             stream = FileStream(str(folder / (name + '.png')), FileMode.Create)
@@ -161,9 +165,28 @@ def main():
                 click('#resetForm')
                 evaluate("document.getElementById('championName').value='Ahri'; document.getElementById('championName').dispatchEvent(new Event('input'))")
                 check('champion ID autocomplete', "document.getElementById('championId').value === '103'")
+                api._selected = package
+                evaluate("const f=document.getElementById('modForm');f.elements.namedItem('id').value='fixture';f.elements.namedItem('name').value='QA Ahri updated';f.elements.namedItem('version').value='2.0.0';f.dispatchEvent(new Event('submit',{cancelable:true}))")
+                wait_for("document.getElementById('importReplaceDialog').open")
+                check('replacement preview compares versions', "document.getElementById('importReplaceDialog').textContent.includes('v1.0.0 → QA Ahri updated · v2.0.0')")
+                assert library.installed()['fixture']['version'] == '1.0.0'
+                click('#importReplaceDialog button:not(.primary)')
+                assert library.installed()['fixture']['version'] == '1.0.0'
+                results['checks'].append('cancelling replacement preserves existing files')
+                evaluate("document.getElementById('modForm').dispatchEvent(new Event('submit',{cancelable:true}))")
+                wait_for("document.getElementById('importReplaceDialog').open")
+                click('#importReplaceDialog .primary')
+                wait_for("!document.getElementById('importReplaceDialog').open")
+                assert library.installed()['fixture']['version'] == '2.0.0'
+                assert any(item['mod_id'] == 'fixture' and item['version'] == '1.0.0' for item in library.removed())
+                results['checks'].append('confirmed replacement retains original backup')
+
                 click('[data-page="diagnostics"]')
                 click('#checkDiagnostics')
                 check('local diagnostics rendered', "document.querySelectorAll('#diagnosticsGrid article').length >= 7")
+                check('storage usage renders six local categories', "!document.getElementById('storageSummary').hidden && document.querySelectorAll('#storageGrid .storage-card').length === 6")
+                click('#showStorageBackups')
+                check('storage shortcut opens and focuses local backups', "document.getElementById('recovery').open && document.activeElement === document.querySelector('#recovery summary')")
                 click('[data-page="assistants"]')
                 evaluate("document.getElementById('theme').value='light';document.getElementById('theme').dispatchEvent(new Event('change'))")
                 wait_for("document.documentElement.dataset.theme === 'light'")
@@ -207,6 +230,23 @@ def main():
                         click('[data-page="guides"]')
                         time.sleep(.3)
                         capture(f'guides-{width}')
+                if options.zoom_check:
+                    from System import Action
+                    for width in (850, 1180):
+                        window.resize(width, 800)
+                        for zoom in (1.25, 1.5, 2.0):
+                            window.native.webview.Invoke(Action(lambda: setattr(window.native.webview, 'ZoomFactor', zoom)))
+                            time.sleep(.3)
+                            for section in ('home', 'library', 'installed', 'profiles', 'guides', 'assistants', 'publish', 'diagnostics', 'downloads'):
+                                click(f'[data-page="{section}"]' if section != 'publish' else '#quickImport')
+                                overflow = evaluate("({viewport:innerWidth,width:document.documentElement.scrollWidth,offenders:Array.from(document.querySelectorAll('main *')).filter(e=>e.getBoundingClientRect().width>0&&e.getBoundingClientRect().right>innerWidth+1).slice(0,12).map(e=>({tag:e.tagName,id:e.id,cls:e.className,right:e.getBoundingClientRect().right}))})")
+                                assert overflow['width'] <= overflow['viewport'] + 1, f'{section} at {width}px/{zoom}: {overflow}'
+                                results['checks'].append(f'{section} at {width}px/{int(zoom*100)}% zoom: no overflow')
+                            if options.capture:
+                                click('[data-page="installed"]')
+                                capture(f'installed-{width}-zoom-{int(zoom*100)}')
+                    window.native.webview.Invoke(Action(lambda: setattr(window.native.webview, 'ZoomFactor', 1.0)))
+                    window.resize(1180, 800)
                 click('[data-page="home"]')
                 if '--accessibility' in sys.argv:
                     axe = ROOT / 'test/ui/node_modules/axe-core/axe.min.js'
@@ -235,7 +275,7 @@ def main():
                 check('no JavaScript errors', 'window.__qaErrors.length === 0')
                 if options.soak_seconds:
                     from hub_soak import run as soak
-                    soak(window, evaluate, click, wait_for, ROOT, options.soak_seconds)
+                    soak(window, evaluate, click, wait_for, ROOT, options.soak_seconds, output=options.soak_report)
                     results['checks'].append('Native WebView endurance completed')
                 results['ok'] = True
             except Exception as exc:
@@ -245,7 +285,7 @@ def main():
                 download_release.set()
                 api._downloads().close()
                 api._downloads().wait_closed(10)
-                report = ROOT / 'build/hub-webview-check.json'
+                report = options.report
                 report.parent.mkdir(exist_ok=True)
                 report.write_text(json.dumps(results, ensure_ascii=False, indent=2), encoding='utf-8')
                 if '--keep-open' not in sys.argv:

@@ -8,8 +8,9 @@ import time
 import psutil
 
 
-def run(window, evaluate, click, wait_for, root, duration, interval=15):
-    output = root / 'build/hub-webview-endurance.json'
+def run(window, evaluate, click, wait_for, root, duration, interval=15, output=None):
+    output = Path(output) if output else root / 'build/hub-webview-endurance.json'
+    output.parent.mkdir(parents=True, exist_ok=True)
     report = {'ok': False, 'running': True, 'cycles': 0, 'samples': [], 'errors': [],
         'scope': 'Real isolated WebView2 window, bridge, preferences, filters and focus. No game started.',
         'source_sha256': {name: hashlib.sha256((root / name).read_bytes()).hexdigest()
@@ -53,6 +54,13 @@ def run(window, evaluate, click, wait_for, root, duration, interval=15):
                 width, height = ((850, 620), (1180, 800), (1600, 950))[(cycle // 6) % 3]
                 window.resize(width, height)
                 time.sleep(.2)
+            if cycle % 12 == 0:
+                click('#quickImport')
+                evaluate("document.getElementById('modForm').dispatchEvent(new Event('submit',{cancelable:true}))")
+                wait_for("document.getElementById('importReplaceDialog').open")
+                assert evaluate("document.getElementById('importReplaceDialog').contains(document.activeElement)"), 'Replacement dialog focus escaped'
+                click('#importReplaceDialog button:not(.primary)')
+                assert evaluate("!document.getElementById('importReplaceDialog').open"), 'Cancelled preview stayed open'
             click('[data-page="' + pages[cycle % len(pages)] + '"]')
             assert evaluate('document.documentElement.scrollWidth <= window.innerWidth'), 'Horizontal overflow'
             assert evaluate('window.__qaErrors.length === 0'), 'Uncaught JavaScript error'

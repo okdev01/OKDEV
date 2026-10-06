@@ -5,6 +5,7 @@ import sys
 import tempfile
 import threading
 import time
+import uuid
 from pathlib import Path
 from unittest.mock import patch
 
@@ -106,8 +107,13 @@ def main():
         thread = threading.Thread(target=exercise, daemon=True)
         thread.start()
         try:
-            companion.run()
-            thread.join(35)
+            # The user's installed companion may already own the production
+            # mutex and shortcuts. Keep this disposable QA instance independent.
+            with patch.object(companion, '_MUTEX_NAME', 'Local\\OKDEV-GuideQA-' + uuid.uuid4().hex), patch.dict(companion.HOTKEYS, {
+                    'Ctrl+Shift+B': (0x0002 | 0x0004, 0x7C),  # Ctrl+Shift+F13
+                    'Ctrl+Shift+M': (0x0002 | 0x0004, 0x7D)}):
+                companion.run()
+                thread.join(35)
         finally:
             paths._cached_user_data_dir = previous
             paths._migration_checked = previous_migration
