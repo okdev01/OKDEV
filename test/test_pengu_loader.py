@@ -42,7 +42,7 @@ class PenguLoaderIntegrationTests(unittest.TestCase):
             _CONFIG_FILE=self.config_file,
         )
         self.paths.start()
-        external = patch.object(pengu_loader, '_external_pengu_with_rose_plugins', return_value=None)
+        external = patch.object(pengu_loader, '_external_pengu_with_okdev_plugins', return_value=None)
         external.start()
         self.addCleanup(external.stop)
         processes = patch.object(pengu_loader, '_process_running', return_value=False)
@@ -67,7 +67,7 @@ class PenguLoaderIntegrationTests(unittest.TestCase):
         program_source = Path('vendor/PenguLoader-1.1.6/loader/Program.cs').read_text(encoding='utf-8')
         ifeo_source = Path('vendor/PenguLoader-1.1.6/loader/Main/IFEO.cs').read_text(encoding='utf-8')
 
-        for forbidden in ('--rose-managed', '--rose-stop', '--force-deactivate', 'taskkill'):
+        for forbidden in ('--okdev-managed', '--okdev-stop', '--force-deactivate', 'taskkill'):
             self.assertNotIn(forbidden, integration_source)
             self.assertNotIn(forbidden, program_source)
 
@@ -79,7 +79,7 @@ class PenguLoaderIntegrationTests(unittest.TestCase):
         self.assertFalse(Path('vendor/PenguLoader-1.1.6/loader/Main/Win32Registry.cs').exists())
 
     def test_legacy_pengu_logs_are_removed(self):
-        for filename in ('rose.log', 'rose.log.old', 'crash.log'):
+        for filename in ('okdev.log', 'okdev.log.old', 'crash.log'):
             path = self.pengu_dir / filename
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text('legacy diagnostics', encoding='utf-8')
@@ -87,13 +87,13 @@ class PenguLoaderIntegrationTests(unittest.TestCase):
 
         pengu_loader._remove_legacy_pengu_logs(self.pengu_dir)
 
-        for filename in ('rose.log', 'rose.log.old', 'crash.log'):
+        for filename in ('okdev.log', 'okdev.log.old', 'crash.log'):
             self.assertFalse((self.pengu_dir / filename).exists())
         self.assertTrue(self.pengu_log.exists())
 
     def test_legacy_cleanup_and_packaging_exclusions_are_wired(self):
         source = Path(pengu_loader.__file__).read_text(encoding='utf-8')
-        spec_source = Path('Rose.spec').read_text(encoding='utf-8')
+        spec_source = Path('OKDEV.spec').read_text(encoding='utf-8')
         program_source = Path(
             'vendor/PenguLoader-1.1.6/loader/Program.cs'
         ).read_text(encoding='utf-8')
@@ -144,8 +144,8 @@ class PenguLoaderIntegrationTests(unittest.TestCase):
     def test_successful_activation_creates_session(self, _running, activate, _status, _available):
         self.assertTrue(pengu_loader.activate_on_start())
         state = json.loads(self.session_file.read_text(encoding='utf-8'))
-        self.assertFalse(state['pengu_was_active_before_rose'])
-        self.assertTrue(state['rose_activated_pengu'])
+        self.assertFalse(state['pengu_was_active_before_okdev'])
+        self.assertTrue(state['okdev_activated_pengu'])
         activate.assert_called_once_with()
 
     @patch.object(pengu_loader, '_is_available', return_value=True)
@@ -190,15 +190,15 @@ class PenguLoaderIntegrationTests(unittest.TestCase):
         activate.assert_not_called()
         deactivate.assert_not_called()
         state = json.loads(self.session_file.read_text(encoding='utf-8'))
-        self.assertTrue(state['rose_activated_pengu'])
-        self.assertFalse(state['pengu_was_active_before_rose'])
+        self.assertTrue(state['okdev_activated_pengu'])
+        self.assertFalse(state['pengu_was_active_before_okdev'])
 
     @patch.object(pengu_loader, '_is_available', return_value=True)
     @patch.object(pengu_loader, '_is_league_running', return_value=False)
     @patch.object(pengu_loader, 'deactivate', return_value=True)
     def test_successful_shutdown_removes_session(self, deactivate, _running, _available):
         pengu_loader._write_session(False, True)
-        self.assertTrue(pengu_loader.restore_after_rose())
+        self.assertTrue(pengu_loader.restore_after_okdev())
         self.assertFalse(self.session_file.exists())
         deactivate.assert_called_once_with()
 
@@ -210,7 +210,7 @@ class PenguLoaderIntegrationTests(unittest.TestCase):
         self, deactivate, restart_client, _running, _available
     ):
         pengu_loader._write_session(False, True)
-        self.assertTrue(pengu_loader.restore_after_rose())
+        self.assertTrue(pengu_loader.restore_after_okdev())
         deactivate.assert_called_once_with()
         restart_client.assert_called_once_with()
         self.assertFalse(self.session_file.exists())
@@ -219,14 +219,14 @@ class PenguLoaderIntegrationTests(unittest.TestCase):
     @patch.object(pengu_loader, 'deactivate', return_value=False)
     def test_failed_shutdown_keeps_recovery_session(self, deactivate, _available):
         pengu_loader._write_session(False, True)
-        self.assertFalse(pengu_loader.restore_after_rose())
+        self.assertFalse(pengu_loader.restore_after_okdev())
         self.assertTrue(self.session_file.exists())
         deactivate.assert_called_once_with()
 
     @patch.object(pengu_loader, 'deactivate')
     def test_preexisting_active_state_is_preserved(self, deactivate):
         pengu_loader._write_session(True, False)
-        self.assertTrue(pengu_loader.restore_after_rose())
+        self.assertTrue(pengu_loader.restore_after_okdev())
         self.assertFalse(self.session_file.exists())
         deactivate.assert_not_called()
 
@@ -313,8 +313,8 @@ class PenguLoaderIntegrationTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
         self.assertNotIn('should not be included', '\n'.join(logs.output))
 
-    def test_loader_writes_roses_config_ini(self):
-        self.assertEqual(os.environ['ROSE_CONFIG_PATH'], str(config.get_config_file_path()))
+    def test_loader_writes_okdevs_config_ini(self):
+        self.assertEqual(os.environ['OKDEV_CONFIG_PATH'], str(config.get_config_file_path()))
 
     @patch.object(pengu_loader, '_is_available', return_value=True)
     @patch.object(pengu_loader, 'get_status', return_value=pengu_loader.PenguStatus.ACTIVE)
@@ -335,7 +335,7 @@ class PenguLoaderIntegrationTests(unittest.TestCase):
         self.config_file.write_text(
             f'[General]\ndisabled=0\nloaderpath={self.pengu_dir}\n', encoding='mbcs'
         )
-        with patch.object(pengu_loader, 'write_config_file') as write:
+        with patch.object(config, 'write_config_file') as write:
             pengu_loader._ensure_loader_config()
         write.assert_not_called()
 
@@ -343,7 +343,7 @@ class PenguLoaderIntegrationTests(unittest.TestCase):
 @unittest.skipUnless(sys.platform == 'win32', 'config.ini is shared through the Windows INI API')
 class ConfigIniTests(unittest.TestCase):
     """config.ini is read by core.dll and written by the Pengu loader through
-    the Windows INI API (ANSI code page), and by Rose in Python"""
+    the Windows Unicode INI API, and by OKDEV in Python"""
 
     def setUp(self):
         temp_dir = tempfile.TemporaryDirectory()
@@ -363,8 +363,8 @@ class ConfigIniTests(unittest.TestCase):
         ctypes.windll.kernel32.WritePrivateProfileStringW('General', key, value, str(self.config_file))
 
     @unittest.skipUnless(_ansi_can_encode('é'), 'the ANSI code page has no é')
-    def test_non_ascii_loaderpath_survives_rose_writes(self):
-        loader_dir = r'C:\Users\José\AppData\Local\Rose\Pengu Loader'
+    def test_non_ascii_loaderpath_survives_okdev_writes(self):
+        loader_dir = r'C:\Users\José\AppData\Local\OKDEV\Pengu Loader'
         self.config_file.write_text('[General]\ninjection_threshold = 0.5\n', encoding='mbcs')
         self.loader_writes('disabled', '0')
         self.loader_writes('loaderpath', loader_dir)
@@ -377,7 +377,7 @@ class ConfigIniTests(unittest.TestCase):
         self.assertEqual(config.get_config_option('General', 'loaderpath'), loader_dir)
 
     @unittest.skipUnless(_ansi_can_encode('é'), 'the ANSI code page has no é')
-    def test_reads_lines_older_rose_wrote_as_utf8(self):
+    def test_reads_lines_older_okdev_wrote_as_utf8(self):
         self.config_file.write_bytes(
             '[General]\r\nleaguepath = C:\\Jeux\\Légendes\r\n'.encode('utf-8')
             + 'loaderpath=C:\\Users\\José\\Pengu Loader\r\n'.encode('mbcs')
@@ -395,6 +395,36 @@ class ConfigIniTests(unittest.TestCase):
         self.assertEqual(self.core_dll_reads(self.config_file, 'new'), '2')
         self.assertEqual(self.core_dll_reads(self.config_file, 'old'), '')
         self.assertEqual(list(self.config_file.parent.iterdir()), [self.config_file])
+
+    def test_unicode_paths_roundtrip_between_python_and_native_loader(self):
+        loader_dir = 'C:\\Users\\测试-Игрок-Çağrı-🎮\\Pengu Loader'
+        config.set_config_option('General', 'loaderpath', loader_dir)
+        self.assertTrue(self.config_file.read_bytes().startswith(b'\xff\xfe'))
+        self.assertEqual(self.core_dll_reads(self.config_file, 'loaderpath'), loader_dir)
+        client_dir = 'D:\\游戏\\Riot Games\\League of Legends'
+        self.loader_writes('clientpath', client_dir)
+        config.set_config_option('General', 'disabled', '0')
+        self.assertEqual(config.get_config_option('General', 'clientpath'), client_dir)
+        self.assertEqual(self.core_dll_reads(self.config_file, 'clientpath'), client_dir)
+        self.assertEqual(self.core_dll_reads(self.config_file, 'loaderpath'), loader_dir)
+
+    def test_persistent_sharing_violation_preserves_original_settings(self):
+        original = b'[General]\r\nimportant=original\r\n'
+        self.config_file.write_bytes(original)
+        parser = configparser.ConfigParser()
+        parser['General'] = {'important': 'new'}
+        with patch('utils.core.atomic_file.os.replace', side_effect=PermissionError('locked')), \
+                patch('utils.core.atomic_file.time.sleep'):
+            with self.assertRaises(PermissionError):
+                config.write_config_file(parser, self.config_file)
+        self.assertEqual(self.config_file.read_bytes(), original)
+        self.assertEqual(list(self.config_file.parent.iterdir()), [self.config_file])
+
+    def test_percent_in_windows_path_is_literal(self):
+        loader_dir = 'C:\\Users\\Player%100\\Pengu Loader'
+        config.set_config_option('General', 'loaderpath', loader_dir)
+        self.assertEqual(config.get_config_option('General', 'loaderpath'), loader_dir)
+        self.assertEqual(self.core_dll_reads(self.config_file, 'loaderpath'), loader_dir)
 
 
 if __name__ == '__main__':

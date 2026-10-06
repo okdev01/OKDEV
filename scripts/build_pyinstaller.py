@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Build script for Rose using PyInstaller
+Build script for OKDEV using PyInstaller
 Fast builds with Windows UI API support
 """
 
@@ -15,10 +15,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-MIN_PYTHON = (3, 11)
+MIN_PYTHON = (3, 12)
 if sys.version_info < MIN_PYTHON:
     sys.stderr.write(
-        f"Rose build scripts require Python {MIN_PYTHON[0]}.{MIN_PYTHON[1]} or newer.\n"
+        f"OKDEV build scripts require Python {MIN_PYTHON[0]}.{MIN_PYTHON[1]} or newer.\n"
         "Please re-run using an updated interpreter.\n"
     )
     sys.exit(1)
@@ -40,33 +40,36 @@ def print_step(step_num, total_steps, description):
 def clean_previous_builds():
     """Clean previous build output (preserves build/ cache for faster rebuilds)"""
     print_step(1, 4, "Cleaning Previous Build Output")
-    
+
     # Only clean dist/ - preserve build/ folder for PyInstaller cache
     dirs_to_clean = ["dist"]
-    
+
     for dir_name in dirs_to_clean:
         directory = ROOT / dir_name
         if directory.exists():
+            if directory.resolve().parent != ROOT.resolve() or directory.is_symlink() or directory.is_junction():
+                raise RuntimeError("Build output path is outside the workspace")
             try:
                 shutil.rmtree(directory)
                 print(f"[OK] Removed {dir_name}/")
             except Exception as e:
                 print(f"[ERROR] Failed to remove {dir_name}/: {e}")
-    
+                return False
+
     # Check if build cache exists
     if (ROOT / "build").exists():
         print("[INFO] Preserved build/ folder for faster incremental builds")
     else:
         print("[INFO] No build/ cache found - this will be a full build")
-    
+
     # Note: injection/ directories are no longer cleaned as they contain real scripts
     # that need to be preserved (tools, config, etc.)
-    
+
     return True
 
 
 def build_pengu_loader():
-    """Build the vendored Pengu Loader source before packaging Rose."""
+    """Build the vendored Pengu Loader source before packaging OKDEV."""
     print_step(2, 4, "Building Pengu Loader From Source")
 
     script = ROOT / "scripts" / "build_pengu_loader.py"
@@ -108,14 +111,14 @@ def build_with_pyinstaller():
 
     # Use spec file which has all the configuration
     cmd = [
-        "pyinstaller",
+        sys.executable, "-m", "PyInstaller",
         "--clean",
         "--noconfirm",
-        "Rose.spec",
+        "OKDEV.spec",
     ]
-    
+
     print(f"Running: {' '.join(cmd)}\n")
-    
+
     try:
         result = subprocess.run(cmd, check=True, cwd=ROOT)
         print("\n[OK] PyInstaller build completed successfully!")
@@ -128,22 +131,23 @@ def build_with_pyinstaller():
 def organize_output():
     """Organize output files and verify"""
     print_step(4, 4, "Organizing Output & Verification")
-    
+
     dist_folder = ROOT / "dist/OKDEV"
-    
+
     if not dist_folder.exists():
         print("[ERROR] Build output not found!")
         return False
-    
+
+    shutil.copy2(ROOT / "assets/icon.ico", dist_folder / "icon.ico")
     return True
 
 
 def main():
     """Main build process"""
-    print_header("Rose - PyInstaller Build")
-    
+    print_header("OKDEV - PyInstaller Build")
+
     start_time = time.time()
-    
+
     # Execute build steps
     if not check_relay_config():
         sys.exit(1)
@@ -156,48 +160,54 @@ def main():
         sys.exit(1)
 
     if "--skip-cslol-stub" in sys.argv[1:]:
-        # Local repair builds can reuse the matching runtime from an installed Rose.
+        # Local repair builds can reuse the matching runtime from an installed OKDEV.
         for name in ("cslol-dll.dll", "cslol-dll.stub"):
             if not (ROOT / "injection" / "tools" / name).is_file():
                 print(f"[ERROR] Existing {name} is required with --skip-cslol-stub")
                 sys.exit(1)
     elif not build_cslol_stub():
         sys.exit(1)
-    
+
+    if subprocess.run([sys.executable, str(ROOT / "scripts/build_okdev_core.py")], cwd=ROOT).returncode:
+        sys.exit(1)
     if not build_with_pyinstaller():
         sys.exit(1)
-    
+
+    subprocess.run([sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean", "--onefile",
+        "--windowed", "--name", "OKDEV-Updater", "--icon", str(ROOT / "assets/icon.ico"),
+        "--distpath", str(ROOT / "dist/OKDEV"), "--workpath", str(ROOT / "build/updater"),
+        "--specpath", str(ROOT / "build"), str(ROOT / "okdev_update_helper.py")], cwd=ROOT, check=True)
     if not organize_output():
         print("[WARNING] Verification incomplete, but build may have succeeded")
-    
+
     # Print summary
     elapsed_time = time.time() - start_time
     minutes = int(elapsed_time // 60)
     seconds = int(elapsed_time % 60)
-    
+
     print_header("[OK] BUILD COMPLETED SUCCESSFULLY!")
-    
+
     exe_path = ROOT / "dist/OKDEV/OKDEV.exe"
-    
+
     if exe_path.exists():
         size_mb = exe_path.stat().st_size / (1024 * 1024)
         print(f"Executable: {exe_path}")
         print(f"Size: {size_mb:.1f} MB")
         print(f"Build time: {minutes}m {seconds}s")
-        
+
         print(f"\nYour application is ready!")
         print(f"\nMode: STANDALONE (folder with all dependencies)")
         print(f"  - All DLLs and dependencies included")
         print(f"  - CSLOL tools included")
-        
+
         print(f"\nProtection:")
         print(f"  - Python bytecode (not raw source)")
         print(f"  - Requires decompiler tools to reverse")
         print(f"  - Good enough against casual theft")
-        
+
         print(f"\nTo test:")
-        print(f"  cd dist\\Rose")
-        print(f"  Rose.exe")
+        print(f"  cd dist\\OKDEV")
+        print(f"  OKDEV.exe")
     else:
         print("[ERROR] Executable not found!")
         sys.exit(1)

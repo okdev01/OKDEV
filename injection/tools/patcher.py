@@ -3,7 +3,7 @@
 """
 LTK patcher binaries (ltk_patcher_host.exe + ltk_patcher_dll.dll).
 
-Users provide their own copy (e.g. from an LTK Manager install); Rose does
+Users provide their own copy (e.g. from an LTK Manager install); OKDEV does
 not ship or pin them. The DLL refuses game builds newer than its built-in
 end-of-life date, so we read that date to fail early instead of silently
 injecting nothing.

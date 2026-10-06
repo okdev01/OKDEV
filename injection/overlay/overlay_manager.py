@@ -54,7 +54,7 @@ DISK_SPACE_ERROR_MARKERS = (
 )
 
 # LTK patcher host settings (see ltk-manager patcher/host/protocol.rs).
-# Flag 4 = CSLOL_HOOK_OPT_OUT_AH_V1: Rose replaces skin0 with the selected
+# Flag 4 = CSLOL_HOOK_OPT_OUT_AH_V1: OKDEV replaces skin0 with the selected
 # skin, which the DLL's base-skin check rejects and then disables the whole
 # overlay; opting out downgrades that to a warning (same as LTK Manager's
 # "enforce skinhack scan" setting turned off). Log level 0x10 = Info.
@@ -163,7 +163,7 @@ class OverlayManager:
                 'overlay_path': str(self.mods_dir.parent),
                 'mods': '/'.join(mod_names or ()),
             },
-            hint='Free up disk space on the drive containing Rose injection files, then retry the skin.',
+            hint='Free up disk space on the drive containing OKDEV injection files, then retry the skin.',
         )
         return True
 
@@ -226,7 +226,7 @@ class OverlayManager:
                 "LTK_PATCHER_MISSING",
                 "error",
                 "Injection failed: the LTK patcher is missing.",
-                hint="Copy ltk_patcher_host.exe and ltk_patcher_dll.dll into Rose's tools folder.",
+                hint="Copy ltk_patcher_host.exe and ltk_patcher_dll.dll into OKDEV's tools folder.",
             )
             return 1
 
@@ -364,7 +364,7 @@ class OverlayManager:
                 "error",
                 "Injection failed while preparing the overlay.",
                 details={"error": str(e)},
-                hint="Check Rose logs for details, then retry.",
+                hint="Check OKDEV logs for details, then retry.",
             )
             self._report_low_disk_space_failure(output_lines + error_lines, mod_names)
             self._abort_ltk_patcher(patcher_session)
@@ -559,9 +559,9 @@ class OverlayManager:
                 self._report_ltk_patcher_failure(session["error"])
                 return 1
             if not game_ended and proc.returncode not in (0, None):
-                if getattr(proc, "stopped_by_rose", False):
-                    # Rose's own cleanup killed it (end of game, lobby, shutdown)
-                    log.info(f"[INJECT] LTK patcher stopped by Rose (exit code {proc.returncode})")
+                if getattr(proc, "stopped_by_okdev", False):
+                    # OKDEV's own cleanup killed it (end of game, lobby, shutdown)
+                    log.info(f"[INJECT] LTK patcher stopped by OKDEV (exit code {proc.returncode})")
                     return 0
                 log.error(f"[INJECT] LTK patcher exited with return code: {proc.returncode}")
                 self._log_runoverlay_tail(runoverlay_log)
@@ -589,7 +589,7 @@ class OverlayManager:
             "LTK_PATCHER_EOL",
             "error",
             f"Injection failed: LTK patcher reached its end of life{since}.",
-            hint="Update LTK Manager, copy its new ltk_patcher_host.exe and ltk_patcher_dll.dll into Rose's tools folder, then restart Rose.",
+            hint="Update LTK Manager, copy its new ltk_patcher_host.exe and ltk_patcher_dll.dll into OKDEV's tools folder, then restart OKDEV.",
         )
 
     @staticmethod
@@ -599,7 +599,7 @@ class OverlayManager:
             "LTK_PATCHER_FAILED",
             "error",
             f"Injection failed: LTK patcher error: {reason}",
-            hint="Make sure your LTK patcher files are up to date, then retry. Details are in rose_runoverlay_*.log.",
+            hint="Make sure your LTK patcher files are up to date, then retry. Details are in okdev_runoverlay_*.log.",
         )
 
     @staticmethod
@@ -655,7 +655,7 @@ class OverlayManager:
             logs_dir = get_user_data_dir() / "logs"
             logs_dir.mkdir(parents=True, exist_ok=True)
             timestamp = time.strftime("%d-%m-%Y_%H-%M-%S")
-            return open(logs_dir / f"rose_runoverlay_{timestamp}.log", "w+", encoding="utf-8", errors="replace")
+            return open(logs_dir / f"okdev_runoverlay_{timestamp}.log", "w+", encoding="utf-8", errors="replace")
         except Exception as e:
             log.debug(f"[INJECT] Could not create runoverlay log: {e}")
             return None

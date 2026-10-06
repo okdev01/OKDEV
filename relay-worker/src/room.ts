@@ -1,7 +1,7 @@
 import { DurableObject } from 'cloudflare:workers';
 
 /**
- * Rose Party Room - Durable Object
+ * OKDEV Party Room - Durable Object
  *
  * Shared room where party members broadcast their skin selections.
  * All messages are JSON, broadcast to everyone else in the room.

@@ -1,2 +1,2 @@
-# Rose - Modular Skin Injector
+# OKDEV - Modular Skin Injector
 # Main package initialization

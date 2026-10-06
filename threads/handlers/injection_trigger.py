@@ -210,6 +210,13 @@ class InjectionTrigger:
         # Mark that we've processed the validated hovered skin.
         self.state.last_hover_written = True
         selected_custom_mod = getattr(self.state, 'selected_custom_mod', None)
+        from hub.library import active_mod
+        hub_mod = active_mod(self.state.locked_champ_id or self.state.hovered_champ_id)
+        if hub_mod:
+            selected_custom_mod = hub_mod
+        elif selected_custom_mod and selected_custom_mod.get('_hub'):
+            selected_custom_mod = None
+        self.state.selected_custom_mod = selected_custom_mod
         mod_name = None
         if selected_custom_mod:
             mod_name = selected_custom_mod.get("mod_name") or selected_custom_mod.get("mod_folder_name")
@@ -631,6 +638,9 @@ class InjectionTrigger:
                     import traceback
                     log.debug(f"[HISTORIC] Traceback: {traceback.format_exc()}")
             
+            from hub.integration import apply_category_selections
+            apply_category_selections(self.state)
+
             # Check if any mods are selected (skin, map, font, announcer, or other)
             selected_map_mod = getattr(self.state, 'selected_map_mod', None)
             selected_font_mod = getattr(self.state, 'selected_font_mod', None)
@@ -658,7 +668,7 @@ class InjectionTrigger:
                     or self.state.hovered_champ_id
                 )
                 # Keep an owned target as the real client-selected skin. The
-                # downloaded Rose carrier is only needed for unowned skins;
+                # downloaded OKDEV carrier is only needed for unowned skins;
                 # using it for an owned skin can move the overlay onto the
                 # carrier's skin0 paths and prevent a mod targeting the actual
                 # owned skin (for example Spirit Blossom Sett) from applying.

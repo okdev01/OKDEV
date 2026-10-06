@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
@@ -30,7 +30,7 @@ namespace PenguLoader
             Topmost = false;
 
             GC.Collect();
-            Updater.CheckUpdate();
+            // Updates are managed by the OKDEV application launcher.
         }
 
         private void ThemeButtonClick(object sender, RoutedEventArgs e)

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the vendored Pengu Loader source and refresh Rose's runtime loader."""
+"""Build the vendored Pengu Loader source and refresh OKDEV's runtime loader."""
 
 from __future__ import annotations
 
@@ -20,6 +20,10 @@ def _find_msbuild() -> list[str] | None:
     configured = os.environ.get("MSBUILD_EXE")
     if configured and Path(configured).exists():
         return [configured]
+
+    dotnet = shutil.which("dotnet")
+    if dotnet:
+        return [dotnet, "msbuild"]
 
     msbuild = shutil.which("msbuild")
     if msbuild:
@@ -77,6 +81,8 @@ def build_loader() -> int:
         return 1
 
     if BUILD_OUTPUT.exists():
+        if BUILD_OUTPUT.resolve().parent != (ROOT / 'build').resolve() or BUILD_OUTPUT.is_symlink() or BUILD_OUTPUT.is_junction():
+            raise RuntimeError('Invalid loader build output path')
         shutil.rmtree(BUILD_OUTPUT)
     BUILD_OUTPUT.mkdir(parents=True)
     RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
@@ -84,7 +90,8 @@ def build_loader() -> int:
     output_path = str(BUILD_OUTPUT) + os.sep
     command = msbuild + [
         str(PROJECT),
-        "/t:Restore,Build",
+        "/restore",
+        "/t:Build",
         "/m",
         "/v:minimal",
         "/p:Configuration=Release",
@@ -119,7 +126,7 @@ def build_loader() -> int:
                 copied.append(destination.name)
     except PermissionError as exc:
         print(f"[ERROR] Could not update the runtime loader: {exc}")
-        print("        Close Rose/Pengu Loader and run the build again.")
+        print("        Close OKDEV/Pengu Loader and run the build again.")
         return 1
 
     if "Pengu Loader.exe" not in copied:

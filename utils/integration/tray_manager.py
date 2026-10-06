@@ -231,11 +231,16 @@ class TrayManager:
         return pystray.Menu(
             pystray.MenuItem(f"OKDEV v{APP_VERSION}", None, enabled=False),
             pystray.Menu.SEPARATOR,
+            pystray.MenuItem('Mod Merkezini Aç', self._on_open_hub, default=True),
             pystray.MenuItem("Open Mods Folder", self._on_open_mods),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Restart", self._on_restart),
             pystray.MenuItem("Quit", self._on_quit),
         )
+
+    def _on_open_hub(self, icon, item):
+        from hub.desktop import open_hub
+        open_hub()
     
     def _run_tray(self):
         """Run the tray icon in a separate thread"""

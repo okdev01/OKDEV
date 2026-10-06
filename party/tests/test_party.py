@@ -5,7 +5,8 @@ import unittest
 import zipfile
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
+from urllib.parse import parse_qs, urlsplit
 
 from party.core import party_storage
 from party.core.party_manager import PartyManager
@@ -37,6 +38,27 @@ def member(summoner_id, name, champion_id=None, skin_id=None, **skin_fields):
     if champion_id is not None:
         skin = {"champion_id": champion_id, "skin_id": skin_id, **skin_fields}
     return {"summoner_id": summoner_id, "summoner_name": name, "skin": skin}
+
+
+class RelayCompatibilityTests(unittest.IsolatedAsyncioTestCase):
+    async def test_independent_release_uses_compatible_relay_protocol(self):
+        from party.network import ws_relay
+
+        relay = ws_relay.PartyRelay("a" * 32, 1, "Me")
+        socket = SimpleNamespace(send=AsyncMock())
+        connect = AsyncMock(return_value=socket)
+        with patch.object(ws_relay, "RELAY_URL", "ws://localhost:8765/"), \
+                patch.object(ws_relay, "APP_VERSION", "1.0.0"), \
+                patch.object(ws_relay.websockets, "connect", connect):
+            self.assertTrue(await relay._open(1))
+
+        url = urlsplit(connect.call_args.args[0])
+        self.assertEqual(url.path, "/room")
+        query = parse_qs(url.query)
+        self.assertEqual(query["v"], ["1.4.4"])
+        self.assertEqual(query["app_version"], ["1.0.0"])
+        self.assertEqual(query["key"], ["a" * 32])
+        socket.send.assert_awaited_once()
 
 
 class TokenTests(unittest.TestCase):
@@ -140,6 +162,13 @@ class SkinCollectorSelectionTests(unittest.TestCase):
         self.assertEqual(self.pick(selected_chroma_id=103004), (103001, 103004, None))
         # A chroma of another skin is ignored
         self.assertEqual(self.pick(selected_chroma_id=103104), (103001, None, None))
+
+    def test_distant_form_ids_are_shared(self):
+        self.assertEqual(self.pick(locked_champ_id=145, last_hovered_skin_id=145070,
+                                   selected_chroma_id=145999), (145070, 145999, None))
+        self.assertEqual(self.pick(locked_champ_id=99, last_hovered_skin_id=99007,
+                                   selected_chroma_id=99999), (99007, 99999, None))
+        self.assertEqual(self.pick(selected_chroma_id=145999), (103001, None, None))
 
     def test_historic_then_random_take_priority(self):
         self.assertEqual(
@@ -436,7 +465,7 @@ class RelayReconnectTests(unittest.TestCase):
         self.assertEqual(self.opens, 1)
         self.assertTrue(self.relay.stopped)
 
-    def test_a_relay_asking_for_a_newer_rose_stops_at_once(self):
+    def test_a_relay_asking_for_a_newer_okdev_stops_at_once(self):
         async def open_(timeout):
             self.opens += 1
             self.relay._update_required = True
@@ -448,7 +477,7 @@ class RelayReconnectTests(unittest.TestCase):
 
     def test_the_update_refusal_says_so(self):
         error = SimpleNamespace(status_code=426)
-        self.assertIn("update Rose", self.module._describe_error(error))
+        self.assertIn("update OKDEV", self.module._describe_error(error))
 
     def test_resume_reconnects_a_stopped_room(self):
         self.relay._stopped = True

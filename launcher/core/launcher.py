@@ -1,5 +1,5 @@
 """
-Native Win32 startup dialog used to prepare Rose before launching.
+Native Win32 startup dialog used to prepare OKDEV before launching.
 
 This replaces the former PyQt-based launcher with a lightweight Steam-style
 progress window that:
@@ -68,7 +68,7 @@ def _show_error(message: str) -> None:
         user32.MessageBoxW(
             None,
             message,
-            "Rose - Launcher",
+            "OKDEV - Launcher",
             MB_OK | MB_ICONERROR | MB_TOPMOST,
         )
         updater_log.error(f"Error dialog shown to user: {message}")
@@ -93,22 +93,22 @@ def _with_ui_updates(dialog: UpdateDialog) -> tuple[Callable[[str], None], Calla
 
 
 def _confirm_update(dialog: UpdateDialog, remote_version: str, local_version: str) -> bool:
-    """Ask whether the user wants to download an available Rose update."""
+    """Ask whether the user wants to download an available OKDEV update."""
     dialog.set_marquee(False)
-    dialog.set_detail("Update available")
-    dialog.set_status(f"Rose {remote_version} is ready to install.")
+    dialog.set_detail("Güncelleme mevcut")
+    dialog.set_status(f"OKDEV {remote_version} kurulmaya hazır.")
     dialog.pump_messages()
 
     message = (
-        f"A new version of Rose is available.\n\n"
-        f"Current version: {local_version}\n"
-        f"New version: {remote_version}\n\n"
-        "Do you want to download and install it now?"
+        f"Yeni OKDEV sürümü mevcut.\n\n"
+        f"Mevcut sürüm: {local_version}\n"
+        f"Yeni sürüm: {remote_version}\n\n"
+        "Şimdi indirip kurmak ister misiniz?"
     )
     result = user32.MessageBoxW(
         dialog.hwnd or None,
         message,
-        "OKDEV update available",
+        "OKDEV güncellemesi",
         MB_YESNO | MB_ICONINFORMATION | MB_DEFBUTTON2 | MB_TOPMOST,
     )
     accepted = result == IDYES
@@ -120,11 +120,11 @@ def _confirm_update(dialog: UpdateDialog, remote_version: str, local_version: st
     )
 
     if accepted:
-        dialog.set_detail("Updating Rose...")
-        dialog.set_status("Downloading update...")
+        dialog.set_detail("OKDEV güncelleniyor…")
+        dialog.set_status("Güncelleme indiriliyor…")
     else:
-        dialog.set_detail("Update skipped")
-        dialog.set_status("Continuing startup...")
+        dialog.set_detail("Güncelleme ertelendi")
+        dialog.set_status("Uygulama açılıyor…")
     dialog.set_marquee(accepted)
     dialog.pump_messages()
     return accepted
@@ -214,7 +214,7 @@ def _run_launcher_dialog(dev_mode: bool, test_download_fail: bool) -> None:
 
         def worker():
             try:
-                _perform_update(dialog, dev_mode=True)  # Never install upstream Rose over OKDEV.
+                _perform_update(dialog, dev_mode=dev_mode)
 
                 hash_sequence = HashCheckSequence()
                 hash_sequence.perform_hash_check(dialog, dev_mode=dev_mode)
@@ -234,7 +234,7 @@ def _run_launcher_dialog(dev_mode: bool, test_download_fail: bool) -> None:
             except Exception as exc:  # noqa: BLE001
                 result["error"] = exc
                 log.error(f"Launcher error: {exc}", exc_info=True)
-                _show_error(f"Failed to prepare Rose:\n\n{exc}")
+                _show_error(f"Failed to prepare OKDEV:\n\n{exc}")
                 updater_log.exception("Launcher sequence crashed", exc_info=True)
             finally:
                 dialog.allow_close()

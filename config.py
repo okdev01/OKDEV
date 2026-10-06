@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Global constants for Rose
+Global constants for OKDEV
 All arbitrary values are centralized here for easy tracking and modification
 """
 
@@ -9,12 +9,15 @@ import io
 import shutil
 import sys
 import logging
+import threading
+from contextlib import contextmanager
 from typing import TYPE_CHECKING, Optional, Tuple
 from pathlib import Path
 import configparser
 
 from utils.core.atomic_file import atomic_write
 from utils.core.paths import get_user_data_dir
+from hub.locking import settings_lock
 
 log = logging.getLogger(__name__)
 
@@ -22,13 +25,14 @@ log = logging.getLogger(__name__)
 # APPLICATION METADATA
 # =============================================================================
 
-APP_VERSION = "1.0.0"                           # Independently versioned OKDEV release
+APP_VERSION = "1.5.0"                           # Independently versioned OKDEV release
 UPSTREAM_VERSION = "1.4.4"                      # Original Rose source baseline
 APP_USER_AGENT = f"OKDEV/{APP_VERSION}"  # User-Agent header for HTTP requests
 GAME_EXECUTABLE_NAMES = ("League of Legends.exe", "League of Legends (TM) Client.exe")
 
-_CONFIG = configparser.ConfigParser()
+_CONFIG = configparser.ConfigParser(interpolation=None)
 _CONFIG_MTIME: float = 0.0  # Last known modification time of config.ini
+_CONFIG_LOCK = threading.RLock()
 
 
 def get_config_file_path() -> Path:
@@ -39,13 +43,15 @@ def get_config_file_path() -> Path:
 
 # config.ini is shared with the Pengu loader and core.dll, which use the Windows
 # INI API: a file without BOM is read and written in the ANSI code page. Writing
-# UTF-8 garbled non-ASCII paths for core.dll (loaderpath under C:\Users\José),
+# UTF-8 garbled non-ASCII paths for core.dll (loaderpath under C:\Users\JosÃ©),
 # which then found no plugins.
+# Legacy decoding only. New Windows files use UTF-16 with a BOM, supported by
+# both Windows INI APIs without losing characters outside the ANSI code page.
 _CONFIG_ENCODING = "mbcs" if sys.platform == "win32" else "utf-8"
 
 
 def _decode_config(data: bytes) -> str:
-    """Decode config.ini, including lines older Rose versions wrote as UTF-8."""
+    """Decode config.ini, including lines older OKDEV versions wrote as UTF-8."""
     if data.startswith(b"\xff\xfe"):
         return data.decode("utf-16")
     if data.startswith(b"\xef\xbb\xbf"):
@@ -70,18 +76,30 @@ def read_config_file(config: configparser.ConfigParser, path: Path) -> None:
 
 
 def write_config_file(config: configparser.ConfigParser, path: Path) -> None:
-    """Write config.ini in the ANSI code page, atomically: League processes read
+    """Write a lossless Windows Unicode INI, atomically: League processes read
     it through core.dll at any time and must never see a half-written file."""
     text = io.StringIO()
     config.write(text)
-    data = text.getvalue().replace("\n", "\r\n").encode(_CONFIG_ENCODING, errors="replace")
+    encoding = "utf-16" if sys.platform == "win32" else "utf-8"
+    data = text.getvalue().replace("\n", "\r\n").encode(encoding)
+    # Retry brief sharing violations, but never truncate a persistently locked
+    # file. The caller reports the error while the original settings stay intact.
+    with atomic_write(path, "wb") as fh:
+        fh.write(data)
 
-    try:
-        with atomic_write(path, "wb") as fh:
-            fh.write(data)
-    except PermissionError:
-        # Still locked (core.dll, an antivirus): write in place rather than lose the change
-        path.write_bytes(data)
+
+@contextmanager
+def edit_config_file(path: Path):
+    """Serialize a complete read/modify/write across cooperating OKDEV processes."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with _CONFIG_LOCK, settings_lock(path):
+        parser = configparser.ConfigParser(interpolation=None)
+        read_config_file(parser, path)
+        before = {section: dict(parser[section]) for section in parser}
+        yield parser
+        if before != {section: dict(parser[section]) for section in parser}:
+            write_config_file(parser, path)
 
 
 def _reload_config() -> None:
@@ -120,10 +138,11 @@ _reload_config()
 
 
 def get_config_option(section: str, option: str, fallback: Optional[str] = None) -> Optional[str]:
-    _reload_config()
-    if _CONFIG.has_option(section, option):
-        return _CONFIG.get(section, option)
-    return fallback
+    with _CONFIG_LOCK:
+        _reload_config()
+        if _CONFIG.has_option(section, option):
+            return _CONFIG.get(section, option)
+        return fallback
 
 
 def get_config_float(section: str, option: str, fallback: float) -> float:
@@ -138,19 +157,11 @@ def get_config_float(section: str, option: str, fallback: float) -> float:
 
 def set_config_option(section: str, option: str, value: str) -> None:
     config_path = get_config_file_path()
-    config = configparser.ConfigParser()
-    if config_path.exists():
-        try:
-            read_config_file(config, config_path)
-        except Exception as e:
-            # Rewriting from an empty parser would erase every other setting
-            log.warning(f"Not saving [{section}] {option}: config file could not be read: {e}")
-            return
-    if section not in config:
-        config.add_section(section)
-    config.set(section, option, value)
     try:
-        write_config_file(config, config_path)
+        with edit_config_file(config_path) as config:
+            if section not in config:
+                config.add_section(section)
+            config.set(section, option, value)
     except Exception as e:
         log.warning(f"Failed to write config file: {e}")
 
@@ -345,16 +356,16 @@ WINDOWS_DPI_AWARENESS_SYSTEM = 1         # PROCESS_SYSTEM_DPI_AWARE
 # =============================================================================
 
 # Lock file name
-LOCK_FILE_NAME = "rose.lock"
+LOCK_FILE_NAME = "okdev.lock"
 
 # NEW: Windows named mutex for single-instance (per-user/session)
 _IS_DEV_BUILD = bool(getattr(sys, "frozen", False)) and (
-    "rosedev" in Path(sys.executable).stem.lower() or "rose-dev" in Path(sys.executable).stem.lower()
+    "okdevdev" in Path(sys.executable).stem.lower() or "okdev-dev" in Path(sys.executable).stem.lower()
 )
-SINGLE_INSTANCE_MUTEX_NAME = r"Local\RoseDevSingleInstance" if _IS_DEV_BUILD else r"Local\RoseSingleInstance"
+SINGLE_INSTANCE_MUTEX_NAME = r"Local\OKDEVDevSingleInstance" if _IS_DEV_BUILD else r"Local\OKDEVSingleInstance"
 
 # Log file patterns (handles .log files)
-LOG_FILE_PATTERN = "rose_*.log*"
+LOG_FILE_PATTERN = "okdev_*.log*"
 UPDATER_LOG_FILE_PATTERN = "log_updater_*.log*"
 LOG_TIMESTAMP_FORMAT = "%d-%m-%Y_%H-%M-%S"  # European format, Windows-compatible
 
@@ -380,7 +391,7 @@ INTERESTING_PHASES = {
 # ANALYTICS CONSTANTS
 # =============================================================================
 
-ANALYTICS_SERVER_URL = 'https://analytics.rosekeys.site/'  # Analytics server endpoint
+ANALYTICS_SERVER_URL = ''  # Analytics server endpoint
 ANALYTICS_PING_INTERVAL_S = 900  # Seconds between presence heartbeats (15 minutes)
 ANALYTICS_ENABLED = False  # OKDEV does not send telemetry to the upstream service.
 ANALYTICS_TIMEOUT_S = 5  # Request timeout in seconds

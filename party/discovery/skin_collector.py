@@ -118,6 +118,13 @@ class SkinCollector:
         if not champion_id:
             return None
 
+        from hub.library import active_mod
+        hub_mod = active_mod(champion_id)
+        if hub_mod:
+            return SkinSelection(summoner_id=summoner_id, summoner_name=summoner_name,
+                                 champion_id=champion_id, skin_id=hub_mod['skin_id'],
+                                 custom_mod_path=hub_mod['relative_path'])
+
         skin_id = None
         chroma_id = None
         custom_mod_path = None
@@ -137,8 +144,11 @@ class SkinCollector:
             skin_id = state.last_hovered_skin_id
             if not custom_mod_path and skin_id:
                 selected_chroma_id = getattr(state, "selected_chroma_id", None)
-                if selected_chroma_id and skin_id < selected_chroma_id < skin_id + 100:
-                    chroma_id = selected_chroma_id
+                if selected_chroma_id:
+                    from utils.core.utilities import get_base_skin_id_for_chroma
+                    base_id = get_base_skin_id_for_chroma(selected_chroma_id, None)
+                    if base_id == skin_id or (base_id is None and skin_id < selected_chroma_id < skin_id + 100):
+                        chroma_id = selected_chroma_id
 
                 selected_custom_mod = getattr(state, "selected_custom_mod", None)
                 if selected_custom_mod and selected_custom_mod.get("skin_id") == skin_id:

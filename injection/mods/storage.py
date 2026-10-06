@@ -56,10 +56,10 @@ class ModStorageService:
     # display name is retained for the final directory, but including it in
     # the temporary directory name can push deeply nested WAD paths over the
     # legacy MAX_PATH limit before the import is renamed into place.
-    IMPORT_TEMP_PREFIX = ".rose-import-"
-    TARGET_METADATA = "rose_mod_targets.json"
-    LEGACY_TARGET_METADATA = "rose_wad_targets.json"
-    CATEGORY_METADATA = "rose_category_mods.json"
+    IMPORT_TEMP_PREFIX = ".okdev-import-"
+    TARGET_METADATA = "okdev_mod_targets.json"
+    LEGACY_TARGET_METADATA = "okdev_wad_targets.json"
+    CATEGORY_METADATA = "okdev_category_mods.json"
 
     CATEGORY_SKINS = "skins"
     CATEGORY_MAPS = "maps"
@@ -164,30 +164,16 @@ class ModStorageService:
 
     def _ensure_mods_root_layout(self) -> None:
         """
-        Ensure `%LOCALAPPDATA%\\Rose\\mods` contains only the expected root category folders.
+        Ensure expected root category folders exist without deleting user data.
 
         - Creates missing category folders.
-        - Removes *extra* root-level folders not in our category list.
-          (Does not touch files and does not touch subfolders within valid categories.)
+        Unknown folders may be manual backups or content from another version.
+        Listing already restricts itself to registered categories; leave other
+        folders untouched instead of treating service creation as a cleanup.
         """
         # Create expected root category folders
         for category in self.ROOT_CATEGORIES:
             (self.mods_root / category).mkdir(parents=True, exist_ok=True)
-
-        # Remove unknown root-level directories
-        try:
-            for entry in self.mods_root.iterdir():
-                if not entry.is_dir():
-                    continue
-                if entry.name in self.ROOT_CATEGORIES:
-                    continue
-                try:
-                    shutil.rmtree(entry, ignore_errors=True)
-                    log.info("[ModStorage] Removed unknown mods category folder: %s", entry)
-                except Exception as exc:  # noqa: BLE001
-                    log.warning("[ModStorage] Failed to remove unknown mods folder %s: %s", entry, exc)
-        except Exception as exc:  # noqa: BLE001
-            log.warning("[ModStorage] Failed to scan mods root %s: %s", self.mods_root, exc)
 
     @property
     def skins_dir(self) -> Path:

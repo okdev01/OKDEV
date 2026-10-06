@@ -136,7 +136,7 @@ class GameMonitor:
                                         break
                                     except AccessDenied:
                                         log.error("[monitor] ACCESS DENIED - Cannot suspend game")
-                                        log.error("[monitor] Try running Rose as Administrator")
+                                        log.error("[monitor] Try running OKDEV as Administrator")
                                         self._monitor_active = False
                                         break
                                     except Exception as e:
@@ -235,7 +235,7 @@ class GameMonitor:
                                     break
                                 except AccessDenied:
                                     log.error("[monitor] ACCESS DENIED - Cannot suspend game")
-                                    log.error("[monitor] Try running Rose as Administrator")
+                                    log.error("[monitor] Try running OKDEV as Administrator")
                                     self._monitor_active = False
                                     # Clear reference if we couldn't suspend (game is running anyway)
                                     self._suspended_game_process = None

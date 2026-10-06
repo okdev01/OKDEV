@@ -65,7 +65,7 @@ def is_chroma_id(skin_id: int, chroma_id_map: Optional[dict]) -> bool:
         True if the skin ID is a chroma, False otherwise
     """
     # Check hardcoded special chroma IDs first (always check these)
-    if skin_id in (145071, 103086, 103087, 99991, 99992, 99993, 99994, 99995, 99996, 99997, 99998, 99999, 82998, 82999, 25999, 875998, 875999, 147002, 147003, 21997, 21998, 21999):
+    if skin_id in (145071, 145999, 103086, 103087, 99991, 99992, 99993, 99994, 99995, 99996, 99997, 99998, 99999, 82998, 82999, 25999, 875998, 875999, 147002, 147003, 21997, 21998, 21999):
         return True
     
     # Check chroma_id_map if it's not None and not empty
@@ -139,7 +139,7 @@ def get_base_skin_id_for_chroma(chroma_id: int, chroma_id_map: Optional[dict]) -
             return 145070  # Risen Legend Kai'Sa base skin ID
         
         # Special case: Immortalized Legend Kai'Sa (145071)
-        if chroma_id == 145071:
+        if chroma_id in (145071, 145999):
             return 145070  # Immortalized Legend Kai'Sa base skin ID
         
         # Special case: Risen Legend Ahri (103085)

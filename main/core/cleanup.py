@@ -23,8 +23,10 @@ log = get_logger()
 def perform_cleanup(state: SharedState, thread_manager: ThreadManager, tray_manager: TrayManager, injection_manager=None) -> None:
     """Perform application cleanup"""
     log_section(log, "Cleanup", "")
+    from hub.desktop import close_hub
+    close_hub()
 
-    # A suspension outlives Rose: resume first, or closing during mkoverlay freezes the game for good
+    # A suspension outlives OKDEV: resume first, or closing during mkoverlay freezes the game for good
     if injection_manager:
         try:
             injection_manager.resume_if_suspended()

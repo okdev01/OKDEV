@@ -114,17 +114,19 @@ def load_mod_historic() -> Dict[str, Union[str, List[str]]]:
 
             # New per-category lists (string accepted as convenience)
             any_new_category_key = False
+            result.update({cat: [] for cat in _CATEGORY_KEYS})
             for cat in _CATEGORY_KEYS:
                 v = data.get(cat)
                 if isinstance(v, str) or isinstance(v, list):
                     items = _as_list(v)
                     if items:
-                        result[cat] = _dedupe_keep_order(items)
                         any_new_category_key = True
-                    else:
-                        result[cat] = []
-                else:
-                    result[cat] = []
+                    for item in items:
+                        # Older legacy writes also copied UI/VFX/etc. into
+                        # "others". Normalize those paths to prevent a cleared
+                        # category from reappearing through the duplicate.
+                        target = _infer_category_from_relative_path(item) if cat == 'others' else cat
+                        result[target] = _dedupe_keep_order([*result[target], item])
 
             # Legacy "other" -> merge into inferred categories
             legacy_items = _as_list(data.get("other"))
@@ -217,12 +219,12 @@ def _write_historic_mod_locked(mod_type: str, relative_path: Union[str, List[str
         for cat, paths in grouped.items():
             if paths:
                 m[cat] = _dedupe_keep_order(paths)
+            else:
+                m.pop(cat, None)
         # Avoid writing legacy key
         if "other" in m:
             del m["other"]
-        mod_type = "others"
-
-    if mod_type in _CATEGORY_KEYS:
+    elif mod_type in _CATEGORY_KEYS:
         items = _as_list(relative_path)
         if items:
             m[mod_type] = _dedupe_keep_order(items)

@@ -98,9 +98,9 @@ def _choose_mod_file() -> Optional[Path]:
         except Exception:
             pass
         selected = filedialog.askopenfilename(
-            title="Select a Rose mod file",
+            title="Select a OKDEV mod file",
             filetypes=[
-                ("Rose mods", "*.fantome *.zip *.modpkg"),
+                ("OKDEV mods", "*.fantome *.zip *.modpkg"),
                 ("Fantome mods", "*.fantome"),
                 ("ZIP mods", "*.zip"),
                 ("Mod packages", "*.modpkg"),
@@ -232,6 +232,8 @@ class MessageHandler:
             self._handle_dice_button_click(payload)
         elif payload_type == "settings-request":
             self._handle_settings_request(payload)
+        elif payload_type in {"guide-request", "guide-toggle", "guide-show", "guide-hide"}:
+            self._handle_guide(payload_type, payload)
         elif payload_type == "path-validate":
             self._handle_path_validate(payload)
         elif payload_type == "open-mods-folder":
@@ -469,6 +471,26 @@ class MessageHandler:
         except Exception as e:
             log.error(f"[SkinMonitor] Failed to handle dice button click: {e}")
     
+    def _handle_guide(self, payload_type: str, payload: dict) -> None:
+        """Small guide controls shared with the desktop; never accept a URL."""
+        from hub import guides, preferences, companion
+        error = ''
+        try:
+            if payload_type == 'guide-toggle':
+                preferences.update({'mobalytics_enabled': payload.get('enabled')})
+            elif payload_type == 'guide-show':
+                companion.command('show')
+            elif payload_type == 'guide-hide':
+                companion.command('hide')
+        except Exception as exc:
+            error = str(exc) if isinstance(exc, ValueError) else 'Rehber işlemi tamamlanamadı. Tekrar dene.'
+        prefs = preferences.get()
+        self._send_response(json.dumps({
+            'type': 'guide-state', 'guide': guides.read_state(), 'companion': companion.status(),
+            'enabled': prefs['mobalytics_enabled'], 'hotkey': prefs['mobalytics_hotkey'],
+            'error': error,
+        }, ensure_ascii=False))
+
     def _handle_settings_request(self, payload: dict) -> None:
         """Handle settings request"""
         try:
@@ -503,7 +525,7 @@ class MessageHandler:
             log.error(f"[SkinMonitor] Failed to handle settings request: {e}")
 
     def _handle_diagnostics_clear(self, payload: dict) -> None:
-        """Clear rose_diagnostics.txt (Diagnostics)"""
+        """Clear okdev_diagnostics.txt (Diagnostics)"""
         try:
             ok = clear_issues()
             response_payload = {
@@ -538,7 +560,7 @@ class MessageHandler:
 
     def _handle_diagnostics_clear_category(self, payload: dict) -> None:
         """
-        Clear only a diagnostics category from rose_diagnostics.txt.
+        Clear only a diagnostics category from okdev_diagnostics.txt.
         Categories:
           - injection_threshold
           - monitor_timeout
@@ -631,11 +653,11 @@ class MessageHandler:
                 log.debug('[SkinMonitor] Could not send diagnostics failure response: %s', send_error)
 
     def _clear_issues_categories(self, categories: set[str]) -> bool:
-        """Remove matching diagnostics entries from rose_diagnostics.txt (best-effort)."""
+        """Remove matching diagnostics entries from okdev_diagnostics.txt (best-effort)."""
         try:
             if not categories:
                 return False
-            p = get_user_data_dir() / "rose_diagnostics.txt"
+            p = get_user_data_dir() / "okdev_diagnostics.txt"
             if not p.exists():
                 return True
 
@@ -686,7 +708,7 @@ class MessageHandler:
 
     def _handle_diagnostics_request(self, payload: dict) -> None:
         """
-        Return a compact, user-friendly list of recent errors, derived from rose_diagnostics.txt.
+        Return a compact, user-friendly list of recent errors, derived from okdev_diagnostics.txt.
         Also includes base skin confirmation stats from the tracker.
         The goal is "what to change" rather than raw logs.
         """
@@ -704,7 +726,7 @@ class MessageHandler:
             response_payload = {
                 "type": "diagnostics-data",
                 "errors": out,
-                "path": str(get_user_data_dir() / "rose_diagnostics.txt"),
+                "path": str(get_user_data_dir() / "okdev_diagnostics.txt"),
                 "baseSkinStats": tracker_stats,
             }
             self._send_response(json.dumps(response_payload))
@@ -716,7 +738,7 @@ class MessageHandler:
                 log.debug('[SkinMonitor] Could not send diagnostics failure response: %s', send_error)
 
     def _compute_diagnostics_errors(self, delete_keys: Optional[set[str]] = None) -> list[dict]:
-        """Compute compact diagnostics error list from rose_diagnostics.txt (never raises).
+        """Compute compact diagnostics error list from okdev_diagnostics.txt (never raises).
 
         With delete_keys, first removes every report whose summary key is in it.
         """
@@ -2543,7 +2565,7 @@ class MessageHandler:
             log.debug(f"[SkinMonitor] Traceback: {traceback.format_exc()}")
 
     def _handle_request_category_mods(self, payload: dict) -> None:
-        """Return the list of mods for a specific top-level category under %LOCALAPPDATA%\\Rose\\mods."""
+        """Return the list of mods for a specific top-level category under %LOCALAPPDATA%\\OKDEV\\mods."""
         if not self.mod_storage:
             return
 
@@ -2612,7 +2634,7 @@ class MessageHandler:
             log.error(f"[SkinMonitor] Failed to launch Pengu Loader UI: {e}")
     
     def _handle_language_save(self, payload: dict) -> None:
-        """Save the language of Rose's menus ("auto": the client's) and tell the plugins"""
+        """Save the language of OKDEV's menus ("auto": the client's) and tell the plugins"""
         from utils.core.i18n import AUTO, LANGUAGES
         language = payload.get("language")
         if language != AUTO and language not in LANGUAGES:
@@ -3189,31 +3211,23 @@ class MessageHandler:
 
     # ==================== Party Mode Handlers ====================
 
+    def _get_party_manager(self):
+        manager = getattr(self.shared_state, 'party_manager', None)
+        if manager is None and self.skin_scraper and self.skin_scraper.lcu:
+            from party.core.party_manager import PartyManager
+            manager = PartyManager(self.skin_scraper.lcu, self.shared_state, self.injection_manager)
+            manager.set_callbacks(on_state_change=lambda state: self.broadcaster.broadcast_party_state())
+            self.shared_state.party_manager = manager
+        return manager
+
     def _handle_party_enable(self, payload: dict) -> None:
         """Handle party mode enable request"""
         try:
-            party_manager = getattr(self.shared_state, 'party_manager', None)
-            if not party_manager:
-                # Initialize party manager
-                from party.core.party_manager import PartyManager
-                from lcu import LCU
-
-                # Get LCU instance from skin_scraper
-                lcu = self.skin_scraper.lcu if self.skin_scraper else None
-                if not lcu:
-                    response_payload = {
-                        "type": "party-enabled",
-                        "success": False,
-                        "error": "LCU not available - is League client running?",
-                    }
-                    self._send_response(json.dumps(response_payload))
-                    return
-
-                party_manager = PartyManager(lcu, self.shared_state, self.injection_manager)
-                self.shared_state.party_manager = party_manager
-                party_manager.set_callbacks(
-                    on_state_change=lambda state: self.broadcaster.broadcast_party_state()
-                )
+            party_manager = self._get_party_manager()
+            if party_manager is None:
+                self._send_response(json.dumps({'type': 'party-enabled', 'success': False,
+                    'error': 'LCU not available - is League client running?'}))
+                return
 
             # Enable party mode (async operation)
             import asyncio
@@ -3386,26 +3400,23 @@ class MessageHandler:
             log.error(f"[PARTY] Error handling remove peer: {e}")
 
     def _handle_party_get_state(self, payload: dict) -> None:
-        """Handle get party state request"""
+        """Restore a remembered account when the client bridge connects or polls."""
         try:
-            party_manager = getattr(self.shared_state, 'party_manager', None)
-            if not party_manager:
-                response_payload = {
-                    "type": "party-state",
-                    "enabled": False,
-                    "my_token": None,
-                    "peers": [],
-                    "timestamp": int(time.time() * 1000),
-                }
+            manager = self._get_party_manager()
+            if manager and self.websocket_server and self.websocket_server.loop:
+                import asyncio
+                async def restore_and_reply():
+                    try:
+                        await manager.restore_session()
+                        self.shared_state.party_mode_enabled = manager.enabled
+                        self.shared_state.party_token = manager.my_token_str if manager.enabled else None
+                        self._send_response(json.dumps({'type': 'party-state', **manager.get_state_dict(),
+                            'timestamp': int(time.time() * 1000)}))
+                    except Exception as exc:
+                        log.warning('[PARTY] Cannot restore remembered party yet: %s', exc)
+                asyncio.run_coroutine_threadsafe(restore_and_reply(), self.websocket_server.loop)
             else:
-                state_dict = party_manager.get_state_dict()
-                response_payload = {
-                    "type": "party-state",
-                    **state_dict,
-                    "timestamp": int(time.time() * 1000),
-                }
-
-            self._send_response(json.dumps(response_payload))
-
-        except Exception as e:
-            log.error(f"[PARTY] Error getting party state: {e}")
+                self._send_response(json.dumps({'type': 'party-state', 'enabled': False,
+                    'my_token': None, 'peers': [], 'timestamp': int(time.time() * 1000)}))
+        except Exception as exc:
+            log.error('[PARTY] Error getting party state: %s', exc)

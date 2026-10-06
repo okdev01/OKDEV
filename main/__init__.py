@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Main entry point for Rose
+Main entry point for OKDEV
 """
 
 import argparse
@@ -13,7 +13,7 @@ from pathlib import Path
 MIN_PYTHON = (3, 11)
 if sys.version_info < MIN_PYTHON:
     raise RuntimeError(
-        f"Rose requires Python {MIN_PYTHON[0]}.{MIN_PYTHON[1]} or newer. "
+        f"OKDEV requires Python {MIN_PYTHON[0]}.{MIN_PYTHON[1]} or newer. "
         "Please upgrade your interpreter and rebuild the application."
     )
 
@@ -130,7 +130,7 @@ def _show_native_dll_dialog(tools_dir, reason="missing", detail=""):
     content = (
         f"{status_body}\n\nHow to fix it:\n{steps}"
     )
-    footer = "Please do not request or share this file in Discord. Rose cannot distribute it because of licensing restrictions."
+    footer = "Please do not request or share this file in Discord. OKDEV cannot distribute it because of licensing restrictions."
     assets_dirs = []
     if hasattr(sys, "_MEIPASS"):
         assets_dirs.append(Path(sys._MEIPASS) / "assets")
@@ -272,7 +272,7 @@ def _show_dll_dialog(tools_dir, reason="missing", detail="") -> bool:
     message = (
         f"{status_title}\n\n{status_body}\n\nHow to fix it:\n{steps}\n\n"
         "Please do not request or share this file in Discord.\n"
-        "Discord: https://discord.gg/roseskins\n\n"
+        "Discord: https://github.com/okdev01/OKDEV\n\n"
         "Press OK to open the tools folder, or Cancel to close OKDEV."
     )
     response = ctypes.windll.user32.MessageBoxW(
@@ -287,7 +287,7 @@ def _show_dll_dialog(tools_dir, reason="missing", detail="") -> bool:
 
 
 def _sync_cslol_stub(tools_dir: Path) -> None:
-    """Replace cslol-dll.dll with Rose's stand-in when they differ.
+    """Replace cslol-dll.dll with OKDEV's stand-in when they differ.
 
     Updaters before this change skip cslol-dll.dll, so an update leaves the
     user's own copy in place. The stand-in ships again as cslol-dll.stub,
@@ -434,18 +434,18 @@ def _update_registry_version() -> None:
         return
     try:
         import winreg
-        key_path = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Rose"
+        key_path = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\OKDEV"
         with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, key_path, 0, winreg.KEY_SET_VALUE) as key:
             winreg.SetValueEx(key, "DisplayVersion", 0, winreg.REG_SZ, APP_VERSION)
     except Exception:
         pass
 
 def _schedule_restart() -> bool:
-    """Spawn a detached helper that relaunches Rose after this process exits.
+    """Spawn a detached helper that relaunches OKDEV after this process exits.
 
     The new instance cannot start while the current one is still alive because
     of the single-instance mutex, so a small batch file waits for this PID to
-    exit and then starts Rose again.
+    exit and then starts OKDEV again.
     """
     import os
     import subprocess
@@ -463,7 +463,7 @@ def _schedule_restart() -> bool:
             workdir = Path(__file__).parent.parent
             launch_cmd = f'start "" /D "{workdir}" "{exe_path}" "main.py"'
 
-        batch_path = Path(tempfile.gettempdir()) / f"rose_restart_{pid}.bat"
+        batch_path = Path(tempfile.gettempdir()) / f"okdev_restart_{pid}.bat"
 
         batch_content = (
             "@echo off\n"
@@ -494,12 +494,12 @@ def _schedule_restart() -> bool:
 
 def run_league_unlock(args: Optional[argparse.Namespace] = None,
                       injection_threshold: Optional[float] = None) -> None:
-    """Run the core Rose application startup and main loop."""
+    """Run the core OKDEV application startup and main loop."""
     # Check for single instance before doing anything else
     check_single_instance()
 
     # Keep the Windows "Apps & features" version in sync after auto-updates
-    # OKDEV does not update the upstream Rose registry entry.
+    # OKDEV does not update the upstream OKDEV registry entry.
 
     # Safety net: recover a previous session before startup. If League still owns
     # the loaded module, cleanup_if_dirty adopts the active session instead.
@@ -514,6 +514,10 @@ def run_league_unlock(args: Optional[argparse.Namespace] = None,
 
     # Initialize system tray manager immediately to hide console
     tray_manager = initialize_tray_manager(args)
+    from hub.desktop import open_hub
+    from hub.preferences import get as hub_preferences
+    if not hub_preferences()['start_minimized']:
+        open_hub()
     
     # Initialize app status manager
     app_status = AppStatus(tray_manager)
@@ -524,6 +528,8 @@ def run_league_unlock(args: Optional[argparse.Namespace] = None,
     
     # Initialize core components
     lcu, skin_scraper, state, injection_manager = initialize_core_components(args, injection_threshold)
+    from hub.helpers import start_helpers
+    start_helpers(state)
     
     # Configure skin writing based on the final injection threshold (seconds → ms)
     state.skin_write_ms = max(0, int(injection_manager.injection_threshold * 1000))
@@ -580,10 +586,10 @@ def run_league_unlock(args: Optional[argparse.Namespace] = None,
         tray_manager.quit_callback = updated_tray_quit_callback
 
         def updated_tray_restart_callback():
-            """Callback for tray restart - relaunch Rose after this process exits"""
+            """Callback for tray restart - relaunch OKDEV after this process exits"""
             log.info("Restart requested from tray - scheduling relaunch")
             if not _schedule_restart():
-                log.warning("Restart scheduling failed; Rose will quit without relaunching")
+                log.warning("Restart scheduling failed; OKDEV will quit without relaunching")
             state.stop = True
             log.info("Stop flag set - main loop should exit before relaunch")
 
@@ -638,7 +644,7 @@ def run_league_unlock(args: Optional[argparse.Namespace] = None,
 
 
 def main() -> None:
-    """Program entry point that prepares and launches Rose."""
+    """Program entry point that prepares and launches OKDEV."""
     from okdev_install_paths import apply_install_paths
     apply_install_paths()
 
@@ -677,7 +683,7 @@ if __name__ == "__main__":
                 "error",
                 "OKDEV crashed unexpectedly.",
                 details={"type": type(e).__name__, "error": str(e)},
-                hint="Check %LOCALAPPDATA%\\Rose\\logs\\ for details.",
+                hint="Check %LOCALAPPDATA%\\OKDEV\\logs\\ for details.",
             )
         except Exception:
             pass
@@ -694,7 +700,7 @@ Traceback:
 ================================================================================
 
 This error has been logged. Please report this issue with the log file.
-Log location: Check %LOCALAPPDATA%\\Rose\\logs\\
+Log location: Check %LOCALAPPDATA%\\OKDEV\\logs\\
 ================================================================================
 """
         
@@ -712,7 +718,7 @@ Log location: Check %LOCALAPPDATA%\\Rose\\logs\\
             try:
                 ctypes.windll.user32.MessageBoxW(
                     0,
-                    f"OKDEV crashed with an unhandled error:\n\n{str(e)}\n\nError type: {type(e).__name__}\n\nPlease check the log file in:\n%LOCALAPPDATA%\\Rose\\logs\\",
+                    f"OKDEV crashed with an unhandled error:\n\n{str(e)}\n\nError type: {type(e).__name__}\n\nPlease check the log file in:\n%LOCALAPPDATA%\\OKDEV\\logs\\",
                     "OKDEV - Fatal Error",
                     0x50010  # MB_OK | MB_ICONERROR | MB_SETFOREGROUND | MB_TOPMOST
                 )

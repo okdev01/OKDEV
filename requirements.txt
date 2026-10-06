@@ -1,16 +1,17 @@
-# Requires Python >= 3.11
+# Requires Python >= 3.12; release builds use CPython 3.12 x64 on Windows
 
 # App requirements
 # Security: All dependencies pinned to specific versions to prevent supply chain attacks
 psutil==5.9.8
-requests==2.31.0
-urllib3==2.0.7
+requests==2.34.2
+urllib3==2.8.0
 websocket-client==1.7.0
 websockets==12.0
-Pillow==10.4.0
+Pillow==12.3.0
 pystray==0.19.5
 xxhash==4.0.1
 zstandard==0.25.0
+pywebview==6.2.1
 
 # Build requirements
 pyinstaller==6.3.0

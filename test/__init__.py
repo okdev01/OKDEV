@@ -1,1 +1,1 @@
-"""Rose test package."""
+"""OKDEV test package."""

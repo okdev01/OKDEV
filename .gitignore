@@ -25,8 +25,8 @@ dist_updater/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+/lib/
+/lib64/
 parts/
 sdist/
 var/
@@ -104,6 +104,7 @@ config.ini
 injection/tools/hashes.game.txt
 Pengu Loader/datastore
 injection/tools/.hashes_state.json
+injection/mods_map.json
 
 chroma_issue.txt
 CLAUDE.md
@@ -119,8 +120,7 @@ Rose_PunchTest*.spec
 Rose_PartyTest.spec
 relay_server.py
 
-# Relay config (contains Worker URL — keep secret)
-party/network/relay_config.py
+# Relay endpoint is public client configuration; keep it in release builds.
 
 # Cython build artifacts
 *.pyd
@@ -135,7 +135,7 @@ skin-key-worker/node_modules/
 relay-worker/.wrangler/
 
 # Local test suites
-/test/
+
 injection/tools/cslol-dll.dll
 injection/tools/cslol-dll.stub
 
@@ -148,4 +148,15 @@ setup-smoke-result.txt
 .setup-verification/
 okdev-install.json
 Pengu Loader/config
-!test/test_patcher_build_date.py
+
+
+# Local verification and vendored build outputs
+.development-backup-*/
+.okdev-before-migration.zip
+node_modules/
+vendor/PenguLoader-1.1.6/plugins/dist/
+vendor/PenguLoader-1.1.6/core/obj/
+
+!vendor/PenguLoader-1.1.6/core/cef/lib/
+!vendor/PenguLoader-1.1.6/core/cef/lib/win/
+!vendor/PenguLoader-1.1.6/core/cef/lib/win/libcef.lib

@@ -7,7 +7,7 @@ Orchestrator for party mode skin sharing via WebSocket relay.
 Everyone keeps their own room open and also joins the rooms of the friends
 whose token they paste. Members advertise the rooms they're in, so everyone
 linked to a party ends up in all of its rooms: any member's token works,
-friends can be added one by one, and older Rose versions (one room each)
+friends can be added one by one, and older OKDEV versions (one room each)
 still see everybody.
 """
 
@@ -21,14 +21,14 @@ from state import SharedState
 from utils.core.i18n import Text
 from utils.core.logging import get_logger
 
-from ..network.ws_relay import PartyRelay, compute_room_key
+from ..network.ws_relay import PartyRelay, compute_room_key, RELAY_URL
 from ..protocol.token_codec import PartyToken, create_token
 from ..protocol.message_types import SkinSelection
 from ..discovery.custom_mods import get_mods_root, mod_hashes
 from ..discovery.lobby_matcher import LobbyMatcher
 from ..discovery.skin_collector import SkinCollector, PartySkinData
 from .party_state import PartyState
-from .party_storage import load_party_key
+from .party_storage import load_party_key, load_party_session, save_party_session
 
 log = get_logger()
 
@@ -62,7 +62,7 @@ def _removed(member: dict, summoner_id: Optional[int]) -> bool:
 
 
 def _state_time(member: dict) -> int:
-    """When a member's state was sent: 0 for older Rose versions, -1 without state."""
+    """When a member's state was sent: 0 for older OKDEV versions, -1 without state."""
     skin = member.get("skin")
     if not isinstance(skin, dict):
         return -1
@@ -91,6 +91,10 @@ class PartyManager:
 
         # Peers removed by the user (until they're added again)
         self._ignored_peers: Set[int] = set()
+        self._saved_peers: Dict[int, dict] = {}
+        self._session_account: Optional[int] = None
+        self._session_lock = asyncio.Lock()
+        self._last_restore_attempt = 0.0
 
         # Discovery
         self._lobby_matcher: Optional[LobbyMatcher] = None
@@ -122,6 +126,42 @@ class PartyManager:
         self._on_peer_update = on_peer_update
 
     async def enable(self) -> str:
+        async with self._session_lock:
+            return await self._enable()
+
+    def _remember(self, enabled=None):
+        if self._session_account is not None:
+            save_party_session(self._session_account, RELAY_URL, {
+                'enabled': self.enabled if enabled is None else enabled,
+                'peers': {str(sid): value for sid, value in self._saved_peers.items()},
+                'ignored': sorted(self._ignored_peers),
+            })
+
+    async def restore_session(self):
+        """Restore only the currently logged-in account, retrying temporary outages."""
+        async with self._session_lock:
+            now = time.monotonic()
+            if now - self._last_restore_attempt < 5:
+                return
+            self._last_restore_attempt = now
+            matcher = LobbyMatcher(self.lcu, self.state)
+            sid = await asyncio.to_thread(matcher.get_my_summoner_id)
+            if not sid:
+                return
+            if self._session_account is not None and self._session_account != sid:
+                await self._disable(remember=False)
+                self._session_account = None
+                self._saved_peers.clear()
+            if self.enabled:
+                return
+            if load_party_session(sid, RELAY_URL).get('enabled') is True:
+                try:
+                    await self._enable()
+                except RuntimeError as exc:
+                    log.info('[PARTY] Remembered party will retry when available: %s', exc)
+                    self._last_restore_attempt = time.monotonic() + 25
+
+    async def _enable(self) -> str:
         """Enable party mode: open our room and return our token."""
         if self.party_state.enabled:
             return self._fresh_token() or ""
@@ -140,6 +180,20 @@ class PartyManager:
 
             self.party_state.my_summoner_id = my_summoner_id
             self.party_state.my_summoner_name = my_summoner_name
+            self._session_account = my_summoner_id
+            remembered = load_party_session(my_summoner_id, RELAY_URL)
+            ignored = remembered.get('ignored', [])
+            self._ignored_peers = {sid for sid in ignored if isinstance(sid, int) and sid > 0} if isinstance(ignored, list) else set()
+            self._saved_peers = {}
+            peers = remembered.get('peers', {})
+            for peer in list(peers.values())[:MAX_ROOMS - 1] if isinstance(peers, dict) else []:
+                try:
+                    token = PartyToken.decode(peer['token'])
+                    if token.summoner_id != my_summoner_id and token.summoner_id not in self._ignored_peers:
+                        self._saved_peers[token.summoner_id] = {'token': token.encode(), 'name': str(peer.get('name') or 'Unknown')}
+                except (ValueError, KeyError, TypeError):
+                    continue
+            self._remember(enabled=True)
 
             # Same key every session, so the token friends already have keeps working
             self._my_key = load_party_key(my_summoner_id)
@@ -159,16 +213,23 @@ class PartyManager:
 
             log.info(f"[PARTY] Party mode enabled. Token: {self.party_state.my_token[:20]}...")
             self._notify_state_change()
+            await self._restore_saved_rooms()
             return self.party_state.my_token
 
         except Exception as e:
             log.error(f"[PARTY] Failed to enable party mode: {e}")
-            await self.disable()
+            await self._disable(remember=False)
             raise RuntimeError(e.args[0] if e.args else str(e)) from e
 
-    async def disable(self):
+    async def disable(self, remember=True):
+        async with self._session_lock:
+            await self._disable(remember=remember)
+
+    async def _disable(self, remember=True):
         """Disable party mode."""
         log.info("[PARTY] Disabling party mode...")
+        if remember:
+            self._remember(enabled=False)
         self._running = False
 
         for task in [self._lobby_check_task, self._skin_broadcast_task]:
@@ -198,6 +259,26 @@ class PartyManager:
         log.info("[PARTY] Party mode disabled")
         self._notify_state_change()
 
+    async def _restore_saved_rooms(self):
+        if not self._running:
+            return
+        now = time.monotonic()
+        for sid, peer in list(self._saved_peers.items()):
+            if not self._running:
+                break
+            if sid in self._ignored_peers:
+                continue
+            token = PartyToken.decode(peer['token'])
+            room = compute_room_key(token.summoner_id, token.encryption_key)
+            if room in self._relays or len(self._relays) >= MAX_ROOMS:
+                continue
+            if now - self._unreachable_rooms.get(room, -FOLLOW_RETRY_S) < FOLLOW_RETRY_S:
+                continue
+            error = await self._join_room(room)
+            if error:
+                self._unreachable_rooms[room] = time.monotonic()
+        self._refresh_peers()
+
     async def add_peer(self, token_str: str) -> Tuple[bool, str]:
         """Join a friend's party by pasting their token.
 
@@ -213,7 +294,7 @@ class PartyManager:
             token = PartyToken.decode(token_str)
         except ValueError as e:
             log.info(f"[PARTY] Invalid token: {e}")
-            return False, "That's not a valid party token. Copy the whole token (it starts with ROSE:)."
+            return False, "That's not a valid party token. Copy the whole token (it starts with OKDEV:)."
 
         if token.summoner_id == self.party_state.my_summoner_id:
             return False, "That's your own token - send it to your friends instead"
@@ -238,6 +319,9 @@ class PartyManager:
         name = await self._wait_for_peer(token.summoner_id, PEER_WAIT_TIMEOUT)
         if not name and token.summoner_id in self._peers_who_removed_us():
             return False, "This friend removed you from their party - they need to add your token back"
+        self._saved_peers[token.summoner_id] = {'token': token.encode(), 'name': name or 'Unknown'}
+        self._remember()
+        self._refresh_peers()
         if name:
             log.info(f"[PARTY] Connected to {name}")
             return True, Text("Connected to {name}", name=name)
@@ -254,6 +338,8 @@ class PartyManager:
         Our state tells them, so they stop showing us and using our skins too.
         """
         self._ignored_peers.add(summoner_id)
+        self._saved_peers.pop(summoner_id, None)
+        self._remember()
         self.party_state.remove_peer(summoner_id)
         if self._skin_collector:
             self._skin_collector.clear_peer(summoner_id)
@@ -278,9 +364,11 @@ class PartyManager:
 
     def get_state_dict(self) -> dict:
         if self.party_state.enabled:
-            # Fresh timestamp: Rose 1.3.1 and older reject tokens older than an hour
+            # Fresh timestamp: OKDEV 1.3.1 and older reject tokens older than an hour
             self.party_state.my_token = self._fresh_token()
-        return self.party_state.to_dict()
+        result = self.party_state.to_dict()
+        result['my_skin_selection'] = self._skin_state if self.enabled else None
+        return result
 
     def _fresh_token(self) -> Optional[str]:
         if not self._my_key or not self.party_state.my_summoner_id:
@@ -442,9 +530,13 @@ class PartyManager:
     def _refresh_peers(self):
         """Rebuild the peer list shown in the UI from all our rooms."""
         merged = self._merged_members()
+        names_changed = False
 
         for sid, (member, connected) in merged.items():
             name = str(member.get("summoner_name") or "Unknown")
+            if sid in self._saved_peers and self._saved_peers[sid]['name'] != name:
+                self._saved_peers[sid]['name'] = name
+                names_changed = True
             if sid not in self.party_state.peers:
                 log.info(f"[PARTY] {name} joined the party")
             self.party_state.add_peer(
@@ -468,6 +560,12 @@ class PartyManager:
             if self._skin_collector:
                 self._skin_collector.clear_peer(sid)
             log.info(f"[PARTY] {name} left the party")
+
+        for sid, peer in self._saved_peers.items():
+            if sid not in merged and sid not in self._ignored_peers and sid not in self._peers_who_removed_us():
+                self.party_state.add_peer(sid, peer['name'], connected=False, connection_state='disconnected')
+        if names_changed:
+            self._remember(enabled=self.enabled or self._running)
 
         if self.party_state.enabled:
             home = self._relays.get(self._home_room)
@@ -501,6 +599,7 @@ class PartyManager:
                 await asyncio.sleep(LOBBY_CHECK_INTERVAL)
                 if not self._running or not self._lobby_matcher:
                     continue
+                await self._restore_saved_rooms()
 
                 # LCU requests block: keep them off the event loop
                 lobby_ids = await asyncio.to_thread(self._lobby_matcher.get_all_summoner_ids)
@@ -557,6 +656,7 @@ class PartyManager:
                     self._skin_state = skin_state
                     pending = None
                     await self._publish_state()
+                    self._notify_state_change()
 
             except asyncio.CancelledError:
                 break
@@ -606,7 +706,7 @@ class PartyManager:
                 skin_state["is_custom"] = True
                 skin_state["custom_mod_content_hash"] = content_hash
                 if legacy_hash:
-                    # Older Rose versions match archive mods by whole-file hash
+                    # Older OKDEV versions match archive mods by whole-file hash
                     skin_state["custom_mod_hash"] = legacy_hash
 
         return skin_state

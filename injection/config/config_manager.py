@@ -9,7 +9,7 @@ import configparser
 from pathlib import Path
 from typing import Optional
 
-from config import get_config_file_path, read_config_file, write_config_file
+from config import get_config_file_path, read_config_file, edit_config_file
 from utils.core.logging import get_logger
 
 log = get_logger()
@@ -35,7 +35,7 @@ class ConfigManager:
             return None
         
         try:
-            config = configparser.ConfigParser()
+            config = configparser.ConfigParser(interpolation=None)
             read_config_file(config, config_path)
             if 'General' in config and 'leaguePath' in config['General']:
                 league_path = config['General']['leaguePath']
@@ -53,7 +53,7 @@ class ConfigManager:
             return None
         
         try:
-            config = configparser.ConfigParser()
+            config = configparser.ConfigParser(interpolation=None)
             read_config_file(config, config_path)
             if 'General' in config and 'clientPath' in config['General']:
                 client_path = config['General']['clientPath']
@@ -64,79 +64,26 @@ class ConfigManager:
         
         return None
     
+    def _save_values(self, values: dict[str, str]) -> None:
+        try:
+            with edit_config_file(self._get_config_path()) as settings:
+                if not settings.has_section('General'):
+                    settings.add_section('General')
+                for key, value in values.items():
+                    settings.set('General', key, value)
+            log.debug('Saved League path configuration')
+        except Exception as exc:
+            log.warning('Failed to save config file: %s', exc)
+
     def save_league_path(self, league_path: str):
-        """Save league path to config.ini file"""
-        config_path = self._get_config_path()
-        try:
-            config = configparser.ConfigParser()
-            
-            # Load existing config if it exists
-            if config_path.exists():
-                read_config_file(config, config_path)
-            
-            # Ensure General section exists
-            if 'General' not in config:
-                config.add_section('General')
-            
-            # Set the league path
-            config.set('General', 'leaguePath', league_path)
-            
-            # Write to file
-            write_config_file(config, config_path)
-            
-            log.debug(f"Saved league path to config: {league_path}")
-        except Exception as e:
-            log.warning(f"Failed to save config file: {e}")
-    
+        self._save_values({'leaguePath': league_path})
+
     def save_client_path(self, client_path: str):
-        """Save client path to config.ini file"""
-        config_path = self._get_config_path()
-        try:
-            config = configparser.ConfigParser()
-            
-            # Load existing config if it exists
-            if config_path.exists():
-                read_config_file(config, config_path)
-            
-            # Ensure General section exists
-            if 'General' not in config:
-                config.add_section('General')
-            
-            # Set the client path
-            config.set('General', 'clientPath', client_path)
-            
-            # Write to file
-            write_config_file(config, config_path)
-            
-            log.debug(f"Saved client path to config: {client_path}")
-        except Exception as e:
-            log.warning(f"Failed to save config file: {e}")
-    
+        self._save_values({'clientPath': client_path})
+
     def save_paths(self, league_path: str, client_path: str):
-        """Save both league and client paths to config.ini file"""
-        config_path = self._get_config_path()
-        try:
-            config = configparser.ConfigParser()
-            
-            # Load existing config if it exists
-            if config_path.exists():
-                read_config_file(config, config_path)
-            
-            # Ensure General section exists
-            if 'General' not in config:
-                config.add_section('General')
-            
-            # Set both paths
-            config.set('General', 'leaguePath', league_path)
-            config.set('General', 'clientPath', client_path)
-            
-            # Write to file
-            write_config_file(config, config_path)
-            
-            log.debug(f"Saved paths to config: league={league_path}, client={client_path}")
-        except Exception as e:
-            log.warning(f"Failed to save config file: {e}")
-    
+        self._save_values({'leaguePath': league_path, 'clientPath': client_path})
+
     @staticmethod
     def infer_client_path_from_league_path(league_path: str) -> Optional[str]:
         """Infer client path from league path.

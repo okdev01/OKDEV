@@ -8,16 +8,16 @@ namespace PenguLoader
 {
     public static class Program
     {
-        public static string Name => "Rose Loader";
-        public static string HomepageUrl => "https://ko-fi.com/roseapp";
-        public static string DiscordUrl => "https://discord.gg/roseskins";
-        public static string GithubRepo => "Alban1911/Rose";
+        public static string Name => "OKDEV Loader";
+        public static string HomepageUrl => "https://github.com/okdev01/OKDEV";
+        public static string DiscordUrl => "https://github.com/okdev01/OKDEV";
+        public static string GithubRepo => "okdev01/OKDEV";
         public static string GithubUrl => $"https://github.com/{GithubRepo}";
         public static string GithubIssuesUrl => $"https://github.com/{GithubRepo}/issues";
-        public const string VERSION = "2.0.0";
+        public const string VERSION = "1.1.0";
 
         private const int ATTACH_PARENT_PROCESS = -1;
-        private const string GUI_MUTEX_NAME = "989d2110-46da-4c8d-84c1-c4a42e43c424";
+        private const string GUI_MUTEX_NAME = "OKDEVLoaderSingleInstance";
         private static bool _consoleAttached;
 
         [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
@@ -61,7 +61,7 @@ namespace PenguLoader
                         case "--help":
                         case "-h":
                         case "/?":
-                            return Notify("Rose Loader " + VERSION + "\n\nCommands: --install, --uninstall, --status, --set-league-path <path>, --restart-client", silent, MessageBoxImage.None);
+                            return Notify("OKDEV Loader " + VERSION + "\n\nCommands: --install, --uninstall, --status, --set-league-path <path>, --restart-client", silent, MessageBoxImage.None);
                         default:
                             return RunApplication(createdNew);
                     }
@@ -96,7 +96,7 @@ namespace PenguLoader
         private static int HandleInstall(bool createdNew, bool active, bool silent)
         {
             // Activation must not replace a module that is already loaded.
-            // Deactivation is safe here: Rose removes IFEO first, then restarts
+            // Deactivation is safe here: OKDEV removes IFEO first, then restarts
             // the League client so the loaded module is unloaded.
             if (!createdNew || (active && Module.IsLoaded))
             {
@@ -106,7 +106,7 @@ namespace PenguLoader
             }
 
             if (!Module.SetActive(active))
-                return Notify("Failed to " + (active ? "activate" : "deactivate") + " Rose.", silent, MessageBoxImage.Error, 1);
+                return Notify("Failed to " + (active ? "activate" : "deactivate") + " OKDEV.", silent, MessageBoxImage.Error, 1);
 
             return Notify("Pengu has been " + (active ? "activated" : "deactivated") + ".",
                 silent, MessageBoxImage.Information);
