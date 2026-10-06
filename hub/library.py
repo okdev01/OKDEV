@@ -255,27 +255,31 @@ def validate_archive(path):
     if path.stat().st_size > MAX_DOWNLOAD:
         raise ValueError('Mod en fazla 512 MB olabilir')
     with zipfile.ZipFile(path) as z:
-        entries = z.infolist()
-        if len(entries) > 20000 or sum(e.file_size for e in entries) > 2 * 1024**3:
-            raise ValueError('Mod arşivi çok büyük')
-        _validate_windows_members(entries)
-        has_wad = False
-        members = {e.filename.lower(): e for e in entries}
-        for entry in entries:
-            name = PurePosixPath(entry.filename)
-            if name.is_absolute() or '..' in name.parts or '\\' in entry.filename or ':' in entry.filename:
-                raise ValueError('Mod arşivinde geçersiz dosya yolu')
-            if stat.S_ISLNK(entry.external_attr >> 16):
-                raise ValueError('Mod arşivi bağlantı içeremez')
-            ritobin = name.suffix.lower() == '.py' and _is_ritobin_source(z, entry, members)
-            if name.suffix.lower() in {'.exe', '.dll', '.ps1', '.bat', '.cmd', '.js', '.py', '.vbs', '.lnk'} and not ritobin:
-                raise ValueError('Mod yalnızca oyun verisi içerebilir')
-            if entry.filename.lower().startswith('wad/') and not entry.is_dir():
-                has_wad = True
-        if not has_wad:
-            raise ValueError('Mod paketinde WAD oyun dosyaları bulunamadı')
-        if z.testzip():
-            raise ValueError('Mod arşivi bozuk')
+        _validate_zip(z)
+
+
+def _validate_zip(z):
+    entries = z.infolist()
+    if len(entries) > 20000 or sum(e.file_size for e in entries) > 2 * 1024**3:
+        raise ValueError('Mod arşivi çok büyük')
+    _validate_windows_members(entries)
+    has_wad = False
+    members = {e.filename.lower(): e for e in entries}
+    for entry in entries:
+        name = PurePosixPath(entry.filename)
+        if name.is_absolute() or '..' in name.parts or '\\' in entry.filename or ':' in entry.filename:
+            raise ValueError('Mod arşivinde geçersiz dosya yolu')
+        if stat.S_ISLNK(entry.external_attr >> 16):
+            raise ValueError('Mod arşivi bağlantı içeremez')
+        ritobin = name.suffix.lower() == '.py' and _is_ritobin_source(z, entry, members)
+        if name.suffix.lower() in {'.exe', '.dll', '.ps1', '.bat', '.cmd', '.js', '.py', '.vbs', '.lnk'} and not ritobin:
+            raise ValueError('Mod yalnızca oyun verisi içerebilir')
+        if entry.filename.lower().startswith('wad/') and not entry.is_dir():
+            has_wad = True
+    if not has_wad:
+        raise ValueError('Mod paketinde WAD oyun dosyaları bulunamadı')
+    if z.testzip():
+        raise ValueError('Mod arşivi bozuk')
 
 
 def _validate_windows_members(entries):

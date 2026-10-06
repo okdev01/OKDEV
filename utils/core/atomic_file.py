@@ -48,13 +48,13 @@ def atomic_write(
     ``durable`` flushes to disk before the swap (~10 ms per file on Windows). Use it for small
     state files; bulk downloads can skip it because an interrupted sync is redone anyway.
     """
-    if mode not in ("w", "wb"):
+    if mode not in ("w", "wb", "w+b"):
         raise ValueError(f"unsupported mode {mode!r}")
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
     try:
-        with os.fdopen(fd, mode, encoding=None if mode == "wb" else encoding) as handle:
+        with os.fdopen(fd, mode, encoding=None if "b" in mode else encoding) as handle:
             yield handle
             if durable:
                 handle.flush()

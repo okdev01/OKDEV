@@ -25,6 +25,12 @@ class PackageInfoTests(LibraryFixture):
         path = self.archive(files={'Info/info.json': '{bad', 'WAD/Ahri.wad.client': b'a'})
         self.assertTrue(inspect(path)['warning'])
 
+    def test_deeply_nested_optional_metadata_still_detects_champion(self):
+        path = self.archive(files={'Info/info.json': '[' * 3000 + '0' + ']' * 3000, 'WAD/Ahri.wad.client': b'fixture'})
+        result = inspect(path)
+        self.assertTrue(result['warning'])
+        self.assertEqual(result['suggested']['champion_id'], 103)
+
     def test_non_zip_has_readable_error(self):
         path = self.root / 'bad.fantome'
         path.write_bytes(b'not-zip')

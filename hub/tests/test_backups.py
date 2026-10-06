@@ -63,6 +63,25 @@ class BackupTests(LibraryFixture):
             self.assertEqual(list(Path(tmp).iterdir()), [output])
         self.assertEqual(len(library.removed()), 1)
 
+    def test_externally_modified_backup_is_validated_before_replacing_export(self):
+        backup_id = self.make_backup()
+        folder = library.root() / 'removed' / backup_id / 'mod'
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / 'export.fantome'
+            output.write_bytes(b'previous valid export')
+            bad_file = folder / 'run.exe'
+            bad_file.write_bytes(b'not a game asset')
+            with self.assertRaisesRegex(ValueError, 'yalnızca oyun verisi'):
+                backups.export(backup_id, output)
+            self.assertEqual(output.read_bytes(), b'previous valid export')
+            self.assertEqual(bad_file.read_bytes(), b'not a game asset')
+            bad_file.unlink()
+            (folder / 'WAD/Ahri.wad.client').unlink()
+            with self.assertRaisesRegex(ValueError, 'WAD oyun dosyaları'):
+                backups.export(backup_id, output)
+            self.assertEqual(output.read_bytes(), b'previous valid export')
+            self.assertEqual(list(Path(tmp).iterdir()), [output])
+
     def test_invalid_backup_ids_never_access_arbitrary_paths(self):
         for backup_id in ('../other', 'not-a-uuid', None, True):
             with self.assertRaises(ValueError):

@@ -1,5 +1,4 @@
 """Short-lived, process-specific shutdown handoff from the tray application."""
-import json
 import os
 import time
 
@@ -17,7 +16,7 @@ def consume_shutdown(started_at):
     try:
         if not path.exists() or path.stat().st_size > 1024 or path.is_symlink():
             return False
-        value = json.loads(path.read_text(encoding='utf-8'))
+        value = library.load_json(path, 1024)
         if (not isinstance(value, dict) or type(value.get('pid')) is not int or value['pid'] != os.getpid()
                 or type(value.get('created_at')) not in (int, float)
                 or not started_at - 1 <= value['created_at'] <= time.time() + 1):

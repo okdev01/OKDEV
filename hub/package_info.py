@@ -41,7 +41,7 @@ def inspect(path):
                         version = raw.get('Version', raw.get('version'))
                         if isinstance(version, str) and len(version) <= 48 and re.fullmatch(r'[0-9]+(?:\.[0-9]+){2,4}', version):
                             suggested['version'] = version
-                except (ValueError, RuntimeError):
+                except (ValueError, RuntimeError, RecursionError):
                     warning = 'Paket bilgileri okunamadı. Alanları elle doldurabilirsin.'
             base = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parents[1]))
             champions = json.loads((base / 'hub/web/champions.json').read_text(encoding='utf-8'))['champions']

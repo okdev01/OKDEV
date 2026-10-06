@@ -70,7 +70,7 @@ def export(backup_id, destination):
             raise ValueError('Yedeği OKDEV veri klasörü dışında bir konuma kaydet.')
         # Preserve the exact game bytes and original package metadata. The
         # optional OKDEV note contains only public descriptive fields.
-        with atomic_write(destination, 'wb') as stream:
+        with atomic_write(destination, 'w+b') as stream:
             with zipfile.ZipFile(stream, 'w', zipfile.ZIP_DEFLATED) as archive:
                 for path in files:
                     relative = path.relative_to(folder / 'mod').as_posix()
@@ -81,4 +81,10 @@ def export(backup_id, destination):
                     if key in item}, ensure_ascii=False))
             if stream.tell() > library.MAX_DOWNLOAD:
                 raise ValueError('Dışa aktarılan paket 512 MB sınırını aşıyor. Özgün yedek korundu.')
+            # Backups can have been edited outside OKDEV since installation.
+            # Validate the finished archive before committing the destination.
+            stream.flush()
+            stream.seek(0)
+            with zipfile.ZipFile(stream, 'r') as archive:
+                library._validate_zip(archive)
         return {'saved': True, 'name': item['name']}
