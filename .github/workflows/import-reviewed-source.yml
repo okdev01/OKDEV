@@ -1,0 +1,69 @@
+name: Import verified OKDEV 1.5 source
+on:
+  workflow_dispatch:
+    inputs:
+      source_commit:
+        description: Reviewed source commit (40 lowercase hex characters)
+        required: true
+        type: string
+      bundle_sha256:
+        description: SHA-256 of the matching source bundle in draft v1.5.0
+        required: true
+        type: string
+      expected_main:
+        description: Reviewed current main commit; stop if main changed
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: okdev-source-import
+  cancel-in-progress: false
+
+jobs:
+  import:
+    if: github.repository == 'okdev01/OKDEV' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+      - name: Verify and import the reviewed source snapshot
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_COMMIT: ${{ inputs.source_commit }}
+          BUNDLE_SHA256: ${{ inputs.bundle_sha256 }}
+          EXPECTED_MAIN: ${{ inputs.expected_main }}
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_COMMIT" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$BUNDLE_SHA256" =~ ^[a-f0-9]{64}$ ]]
+          [[ "$EXPECTED_MAIN" =~ ^[a-f0-9]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$EXPECTED_MAIN"
+          asset="OKDEV_Source_${SOURCE_COMMIT:0:12}.bundle"
+          gh release download v1.5.0 --repo okdev01/OKDEV --pattern "$asset" --dir "$RUNNER_TEMP/okdev-source"
+          bundle="$RUNNER_TEMP/okdev-source/$asset"
+          printf '%s  %s\n' "$BUNDLE_SHA256" "$bundle" | sha256sum --check --strict -
+          git bundle verify "$bundle"
+          git fetch "$bundle" refs/heads/professional-1.5.0
+          test "$(git rev-parse FETCH_HEAD)" = "$SOURCE_COMMIT"
+          git merge-base --is-ancestor 05eacf52e706fab9296546a779d9733f7274d8d2 FETCH_HEAD
+          # Workflow files are reviewed/uploaded through GitHub separately.
+          # The job cannot replace its own workflow or change CI permissions.
+          git restore --source=FETCH_HEAD --staged --worktree -- . ':(exclude).github/workflows'
+          git diff --cached --stat
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          if ! git diff --cached --quiet; then
+            git commit -m "Import verified OKDEV 1.5 source $SOURCE_COMMIT"
+          fi
+          git diff --exit-code FETCH_HEAD HEAD -- . ':(exclude).github/workflows'
+          git push origin HEAD:main
+          printf 'Imported source commit `%s` after SHA-256 verification.\n' "$SOURCE_COMMIT" >> "$GITHUB_STEP_SUMMARY"

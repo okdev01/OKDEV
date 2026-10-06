@@ -13,17 +13,42 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
       - name: Install dependencies
-        run: python -m pip install -r requirements.txt
+        run: python -m pip install --require-hashes -r requirements-windows.lock
       - name: Prepare installer compatibility module
         shell: pwsh
         run: Copy-Item -LiteralPath injection/tools/patcher.py -Destination setup_app/patcher_check.py
       - name: Run compatibility and installer tests
-        run: python -m unittest test.test_patcher_build_date injection.tests.test_early_patcher setup_app.test_setup
-      - name: Build application and native components
+        run: python -m unittest test.test_patcher_build_date injection.tests.test_early_patcher setup_app.test_setup test.test_okdev_migration party.tests.test_party party.tests.test_session_memory pengu.tests.test_bridge_watchdog test.test_pengu_loader
+      - name: Test party skin labels
+        run: node test/party_skin_names.cjs
+      - name: Test mod library and publishing
+        run: python -m unittest discover -s hub/tests -v
+      - name: Test mod library search and version ordering
+        run: node test/hub_view.cjs
+      - name: Install isolated UI test dependencies
+        run: npm ci --prefix test/ui --ignore-scripts --no-audit --no-fund
+      - name: Test desktop UI flows without opening windows
+        run: node test/hub_dom.cjs
+      - name: Test background downloads, portable profiles and backup workflows
+        run: node test/professional_dom.cjs
+      - name: Check concurrent and interrupted library transactions
+        run: python -m unittest hub.tests.test_transactions hub.tests.test_library_concurrency test.test_install_transaction test.test_config_concurrency test.test_native_config -v
+      - name: Test client guide controls and in-page navigation
+        run: node test/guide_plugin.cjs
+      - name: Test updater shutdown
+        run: python -m unittest test.test_updater_shutdown
+      - name: Compile application and native components
         run: python scripts/build_pyinstaller.py
       - name: Build setup executable
         run: python scripts/build_okdev_setup.py
+      - name: Build automatic update package
+        run: python scripts/create_update_package.py
+      - name: Verify candidate contents without launching windows
+        run: python scripts/check_release_candidate.py
       - name: Upload release candidates
         uses: actions/upload-artifact@v4
         with:
