@@ -1,0 +1,15 @@
+const fs = require('node:fs');
+const vm = require('node:vm');
+const assert = require('node:assert/strict');
+const source = fs.readFileSync('Pengu Loader/plugins/OKDEV-FormsWheel/index.js', 'utf8');
+const start = source.indexOf('  function getBaseSkinPreviewPath(');
+const end = source.indexOf('  function getCachedChromasForSkin(', start);
+const realPath = '/lol-game-data/assets/ASSETS/Characters/Kayn/Skins/Skin32/ChromaPreview.SKINS_Kayn_Skin32.png';
+const cache = new Map([[141, new Map([[141032, {rawSkin: {chromaPath: realPath}}]])]]);
+const context = vm.createContext({championSkinCache: cache});
+vm.runInContext(source.slice(start, end) + '\nglobalThis.preview = getBaseSkinPreviewPath;', context);
+assert.equal(context.preview({}, 141, 141032), realPath);
+assert.equal(context.preview({chromaPath: '/explicit.png'}, 81, 81078), '/explicit.png');
+assert.equal(context.preview({}, 81, 81043), '/lol-game-data/assets/v1/champion-chroma-images/81/81043.png');
+assert.equal(context.preview({}, null, null), null);
+console.log('Chroma preview: cached, direct, legacy, and absent paths passed');

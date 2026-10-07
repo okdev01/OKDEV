@@ -2,7 +2,7 @@
 ; This creates a proper Windows installer that registers the app
 
 #define MyAppName "OKDEV"
-#define MyAppVersion "1.5.0"
+#define MyAppVersion "1.5.1"
 #define MyAppVersionInfo "1.5.0.0"
 #define MyAppPublisher "OKDEV Team"
 #define MyAppURL "https://github.com/okdev01/OKDEV"

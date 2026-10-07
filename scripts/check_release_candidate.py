@@ -69,6 +69,7 @@ def main():
         check('hub.' + module in pyz.toc, 'Bundled module: hub.' + module)
     changed_modules = [name for name in pyz.toc if name.startswith('hub.')]
     changed_modules += ['config', 'utils.core.mod_historic', 'utils.core.data_migration',
+        'utils.download.bundled_skins', 'utils.download.skin_downloader',
         'utils.integration.pengu_loader', 'injection.config.config_manager', 'okdev_install_paths',
         'injection.mods.storage', 'threads.handlers.injection_trigger', 'pengu.communication.message_handler', 'main']
     for module in changed_modules:
@@ -100,13 +101,21 @@ def main():
     forbidden = {'config.ini', 'historic.json', 'mod_historic.json', 'party_sessions.json', 'party_keys.json',
                  'installed.json', 'settings.json', 'profiles.json', 'analytics_install_id.txt', 'mods_map.json',
                  'downloads.json', 'activity.json', 'selection-undo.json', 'shutdown.json'}
+    patch_root = ROOT / 'assets/skin-patches/26.20'
+    patch_manifest = json.loads((patch_root / 'manifest.json').read_text(encoding='utf-8'))
+    patch_assets = {'_internal/assets/skin-patches/26.20/' + item['path']: item['sha256']
+                    for item in patch_manifest['packages']}
+    check(len(patch_assets) == 45, 'Seven patch skins and 38 chromas')
     for label, path in [('installer_payload', ROOT / 'setup_app/payload.zip'), ('update', update)]:
         with zipfile.ZipFile(path) as bundle:
             names = bundle.namelist()
             check(bundle.testzip() is None, label + ': archive CRC')
             check(set(required).issubset(names), label + ': required files')
-            check(not any(Path(name).name.lower() in forbidden or name.lower().endswith(('.fantome', '.modpkg', '.log'))
+            check(not any(Path(name).name.lower() in forbidden or (name.lower().endswith(('.fantome', '.modpkg', '.log')) and name not in patch_assets)
                           or 'ltk_patcher' in name.lower() for name in names), label + ': no user data or third-party mod packages')
+            for name, expected_hash in patch_assets.items():
+                check(name in names and hashlib.sha256(bundle.read(name)).hexdigest() == expected_hash,
+                      label + ': verified patch asset ' + name)
             for name in names:
                 if name == 'okdev-update.json':
                     check(json.loads(bundle.read(name)) == {'app': 'OKDEV', 'version': version}, 'Update manifest')

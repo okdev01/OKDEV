@@ -2,6 +2,14 @@
 
 Windows için bağımsız sürümlenen OKDEV istemcisi.
 
+## 1.5.1: 26.20 kostümleri ve seçim düzeltmeleri
+
+26.20 ile gelen yedi kostüm ve 38 renk varyantı eksik kütüphane kayıtlarını tamamlar. Başlangıç senkronizasyonundan sonra paketlerin SHA-256 değerleri doğrulanır; yalnızca eksik dosyalar eklenir. Kaynak depodan gelen mevcut paketler ve isimler korunur. Türkçe/İngilizce isim kayıtları dahildir.
+
+Yeni kostümlerin varsayılan renk önizlemesi istemcinin bildirdiği gerçek görsel adresinden yüklenir. Eksik renk veya bozuk paket nedeniyle hazırlık durursa oyun hemen serbest bırakılır; 60 saniyelik güvenlik süresi beklenmez.
+
+45 paket için BIN dönüşümü, bağımlılık, arşiv bütünlüğü, tekrar içe aktarma ve 26.20 oyun verileriyle çevrimdışı overlay derlemesi doğrulandı. HEARTSTEEL Live My Life Kayn ve iki dönüşümü kullanıcı tarafından antrenman modunda doğrulandı. Diğer kostüm ve renklerin oyun içi görsel/ses doğrulaması henüz yapılmadı. Yerel üretim oyun dosyalarını değiştirmez; LTK dosyaları dağıtıma dahil değildir.
+
 ## 1.5.0: Arka plan indirmeleri ve kurtarılabilir kütüphane
 
 İndirmeler ayrı kuyrukta ilerler; bu sırada arayüz kullanılabilir. **İndirmeler** bölümünde ilerleme, hız ve kalan süre görünür. Bekleyen veya indirilen paket iptal edilebilir, başarısız işler yeniden denenebilir. Uygulama kapanırken başlamış dosya yüklemesi tamamlanır. Bekleyen işler sonraki açılışta kendiliğinden ağ bağlantısı başlatmaz; yeniden başlatmak kullanıcıya bırakılır.

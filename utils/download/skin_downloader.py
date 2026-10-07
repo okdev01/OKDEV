@@ -269,6 +269,12 @@ def download_skins_on_startup(
             tray_manager,
             progress_callback=progress_callback,
         )
+        # Upstream patch assets can lag behind the live game. Reapply verified
+        # missing supplements after a full sync; preserve newer upstream files.
+        from utils.download.bundled_skins import install_bundled_skins
+        added = install_bundled_skins(data_dir=Path(target_dir).parent if target_dir else None)
+        if added:
+            log.info("Installed %s bundled patch skin packages", added)
         if injection_manager:
             injection_manager.initialize_when_ready()
         return result

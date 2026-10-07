@@ -2310,6 +2310,18 @@
     });
   }
 
+  function getBaseSkinPreviewPath(skinData, championId, skinId) {
+    const rawSkin = championSkinCache.get(championId)?.get(skinId)?.rawSkin;
+    // New patches may only ship the explicit ChromaPreview asset. The old
+    // synthetic champion-chroma-images URL is absent for these skins.
+    const path = rawSkin?.chromaPath || rawSkin?.chromaPreviewPath ||
+      skinData?.chromaPath || skinData?.chromaPreviewPath;
+    if (path) return path;
+    return championId && skinId
+      ? `/lol-game-data/assets/v1/champion-chroma-images/${championId}/${skinId}.png`
+      : null;
+  }
+
   function getCachedChromasForSkin(skinId) {
     const numericId = getNumericId(skinId);
     if (!Number.isFinite(numericId)) {
@@ -3942,10 +3954,7 @@
 
       // Include the base skin as the first option (default)
       // Construct image path for default chroma: /lol-game-data/assets/v1/champion-chroma-images/{championId}/{skinId}.png
-      const defaultImagePath =
-        championId && baseSkinId
-          ? `/lol-game-data/assets/v1/champion-chroma-images/${championId}/${baseSkinId}.png`
-          : null;
+      const defaultImagePath = getBaseSkinPreviewPath(skinData, championId, baseSkinId);
 
       const baseSkinChroma = {
         id: baseSkinId,
@@ -3997,10 +4006,7 @@
 
       // Include the base skin as the first option (default)
       // Construct image path for default chroma: /lol-game-data/assets/v1/champion-chroma-images/{championId}/{skinId}.png
-      const defaultImagePath =
-        championId && baseSkinId
-          ? `/lol-game-data/assets/v1/champion-chroma-images/${championId}/${baseSkinId}.png`
-          : null;
+      const defaultImagePath = getBaseSkinPreviewPath(skinData, championId, baseSkinId);
 
       const baseSkinChroma = {
         id: baseSkinId,
@@ -4048,10 +4054,7 @@
 
       // Include the base skin as the first option (default)
       // Construct image path for default chroma: /lol-game-data/assets/v1/champion-chroma-images/{championId}/{skinId}.png
-      const defaultImagePath =
-        championId && baseSkinId
-          ? `/lol-game-data/assets/v1/champion-chroma-images/${championId}/${baseSkinId}.png`
-          : null;
+      const defaultImagePath = getBaseSkinPreviewPath(skinData, championId, baseSkinId);
 
       const baseSkinChroma = {
         id: baseSkinId,

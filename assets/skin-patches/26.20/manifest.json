@@ -1,0 +1,378 @@
+{
+  "patch": "26.20",
+  "game_version": "16.20.8248524",
+  "packages": [
+    {
+      "skin_id": 81078,
+      "path": "81/81078/81078.fantome",
+      "sha256": "40f4efd7bd8d3062ae51b6cdd20f3134cfa25db9a1045e82fd054f045a6861a1"
+    },
+    {
+      "skin_id": 141032,
+      "path": "141/141032/141032.fantome",
+      "sha256": "f26b4ccf4340289cd98b751703ddc47c2c913d9a8ba04e168ded71dd6cf861a6"
+    },
+    {
+      "skin_id": 523041,
+      "path": "523/523041/523041.fantome",
+      "sha256": "cd1a9fce089e016b895a1dfbe595f5d39752246861937eefd5d9dd0c8f6bc3d4"
+    },
+    {
+      "skin_id": 777077,
+      "path": "777/777077/777077.fantome",
+      "sha256": "b4d93623f2ce69aa57e00f8f2b03f12d070fa1ef7d1c104ae0835415a5703e24"
+    },
+    {
+      "skin_id": 897018,
+      "path": "897/897018/897018.fantome",
+      "sha256": "e2fbc776e536667a029041198527a677bbc998f83ec7b4257714a77a260defc3"
+    },
+    {
+      "skin_id": 875076,
+      "path": "875/875076/875076.fantome",
+      "sha256": "104df6aa2ecdd0aad9ac97947a212fe289f3eb55a3fe8a6b2ca4fde7f4f4eafe"
+    },
+    {
+      "skin_id": 96065,
+      "path": "96/96065/96065.fantome",
+      "sha256": "e2ac70ca53da62ba2be2a57e5fa6f1d53fa7840fa5e0a403cb90283af0949dae"
+    },
+    {
+      "skin_id": 81079,
+      "path": "81/81078/81079/81079.fantome",
+      "sha256": "7d2bb47fb1c30d9e04f98278a37afe642ecf14326746050eb1cbf25f9ecbe9b7"
+    },
+    {
+      "skin_id": 81080,
+      "path": "81/81078/81080/81080.fantome",
+      "sha256": "c59fe25a442da09cb4f781afb0c054d851e7395ec6aa63846a9c4aa1b7784eac"
+    },
+    {
+      "skin_id": 81081,
+      "path": "81/81078/81081/81081.fantome",
+      "sha256": "d5e2d71f29858e0fba37d7f9cc4977ed6fa61b3d23f23755fa37eeaad730dcf9"
+    },
+    {
+      "skin_id": 81082,
+      "path": "81/81078/81082/81082.fantome",
+      "sha256": "c847ff4af0dfb30672d3a4e90840b5d4e9e11154272342aebd7c7313805b86a4"
+    },
+    {
+      "skin_id": 81083,
+      "path": "81/81078/81083/81083.fantome",
+      "sha256": "53deb43fedddf14c3bb42d894eed71d98e53a415ecafb1d452a079a2d45ce5fc"
+    },
+    {
+      "skin_id": 81084,
+      "path": "81/81078/81084/81084.fantome",
+      "sha256": "6ab084cc6cfd4ce6e9ad85646a815e029fc17c855964c6ad8912f817679090db"
+    },
+    {
+      "skin_id": 81085,
+      "path": "81/81078/81085/81085.fantome",
+      "sha256": "90d23adb278d26a6deeb95a94f5af1bbc24f319bccd375e7be8c8f08cf19ee81"
+    },
+    {
+      "skin_id": 81086,
+      "path": "81/81078/81086/81086.fantome",
+      "sha256": "16e31357fdb7171b9467b51a6e90780aa8f1a442e0a6d803a91dedb64c975076"
+    },
+    {
+      "skin_id": 141033,
+      "path": "141/141032/141033/141033.fantome",
+      "sha256": "c172b549d5057694dc7a6b97dca99e0a86fb7ea2012ab2996b8804521faa102e"
+    },
+    {
+      "skin_id": 141034,
+      "path": "141/141032/141034/141034.fantome",
+      "sha256": "7445eaf8025928122ff5f230bc12e0f2fca0f412b163805c5479ea7bc4f61272"
+    },
+    {
+      "skin_id": 141035,
+      "path": "141/141032/141035/141035.fantome",
+      "sha256": "a4c507f92d0c38a2014533f42383e22c6346cb0bb6813508c448dae8a39182cb"
+    },
+    {
+      "skin_id": 141036,
+      "path": "141/141032/141036/141036.fantome",
+      "sha256": "e3f9181c89c6a8dd37d6455bd1ab0e2cf11688400e192d6ea5d8ff99c3355b49"
+    },
+    {
+      "skin_id": 523042,
+      "path": "523/523041/523042/523042.fantome",
+      "sha256": "7816abc0a161fb46e53a4d1aaf1f62b78cba6483c00f1045f2315ae486df72f0"
+    },
+    {
+      "skin_id": 523043,
+      "path": "523/523041/523043/523043.fantome",
+      "sha256": "db8f926837e36ae40e8c280dfa45eef1e6af9c31a9e6badcc710d6e620d0af6b"
+    },
+    {
+      "skin_id": 523044,
+      "path": "523/523041/523044/523044.fantome",
+      "sha256": "526e72151476155edfc29a5517b47f7b018d834b75a40a3985cdaf86116161ae"
+    },
+    {
+      "skin_id": 523045,
+      "path": "523/523041/523045/523045.fantome",
+      "sha256": "2b5345c65537a1add6d93a0e24cf8b34ca0aad05c264ba25ad6f79b9f8dbd2eb"
+    },
+    {
+      "skin_id": 523046,
+      "path": "523/523041/523046/523046.fantome",
+      "sha256": "d952e43b6065bfbd3b3ec8bc628d6b65fe237534823c809bec43bcfc07c0abe2"
+    },
+    {
+      "skin_id": 523047,
+      "path": "523/523041/523047/523047.fantome",
+      "sha256": "ae6f659a9331b4f614270aa7212f6ee5a9c28364305eb4f1ea679fec959044ed"
+    },
+    {
+      "skin_id": 523048,
+      "path": "523/523041/523048/523048.fantome",
+      "sha256": "73ea047a6bd90dc5602bfe86137c2c0025ae4bc2fb1810826b5781593acfde0b"
+    },
+    {
+      "skin_id": 523049,
+      "path": "523/523041/523049/523049.fantome",
+      "sha256": "71f0c81e14fbb33e380516970f65f39f550b7c656d0eb1b447bf85a56d7da992"
+    },
+    {
+      "skin_id": 777078,
+      "path": "777/777077/777078/777078.fantome",
+      "sha256": "629e50f0d7c5ae1fba32979102a75f0b140a926d320ed65f643fadcc64f615aa"
+    },
+    {
+      "skin_id": 777079,
+      "path": "777/777077/777079/777079.fantome",
+      "sha256": "53847c81d6c0c3e2288cc3f1d0b87df0c05a7e33a97a7851420b117ca348097a"
+    },
+    {
+      "skin_id": 777080,
+      "path": "777/777077/777080/777080.fantome",
+      "sha256": "18636cf67528754b6e3f47bfea6b5d9a4e0a09b9ddc4454d31a5e696fbf55d76"
+    },
+    {
+      "skin_id": 777081,
+      "path": "777/777077/777081/777081.fantome",
+      "sha256": "bfe005148e43c602aeeb397a95388cb7ae04fc5b2f07f677292b29fd9974126e"
+    },
+    {
+      "skin_id": 777082,
+      "path": "777/777077/777082/777082.fantome",
+      "sha256": "6bed804cc360cb9e317ed3ab6d2c50f61681147e4180024bcb5aa6bb093932fc"
+    },
+    {
+      "skin_id": 777083,
+      "path": "777/777077/777083/777083.fantome",
+      "sha256": "4ac621321423d17428e0e58406bdf5ba1867e1a4021204fb6ade95134db5d317"
+    },
+    {
+      "skin_id": 777084,
+      "path": "777/777077/777084/777084.fantome",
+      "sha256": "8247fbf0eb974cc250d97a5dcc272098f645b068ecd8c2cb39867cdb768ff54d"
+    },
+    {
+      "skin_id": 777085,
+      "path": "777/777077/777085/777085.fantome",
+      "sha256": "b7b2063827f17b578171d887c0a6513bc8c412fa68f205d4b57d75a9948423ec"
+    },
+    {
+      "skin_id": 897019,
+      "path": "897/897018/897019/897019.fantome",
+      "sha256": "f4193d9a174cda680b0f9ffe8bc4a1f7634cc148b7549a457daed7e170e913e5"
+    },
+    {
+      "skin_id": 897020,
+      "path": "897/897018/897020/897020.fantome",
+      "sha256": "903e0b0732c9b8fac54a8508d90c32417a8b371d5caf1775db00f3a79759680d"
+    },
+    {
+      "skin_id": 897021,
+      "path": "897/897018/897021/897021.fantome",
+      "sha256": "414770bbd1d99222452422df869b4957376827505a3a344bef95b11c323f2c09"
+    },
+    {
+      "skin_id": 897022,
+      "path": "897/897018/897022/897022.fantome",
+      "sha256": "de5345343ad3bf31beea988d26453bca2159bd4aca7389557d8fb3512a38d376"
+    },
+    {
+      "skin_id": 897023,
+      "path": "897/897018/897023/897023.fantome",
+      "sha256": "22a90d7ad50094734806bf787c2eb1fac46f89273c787c8a8f9e03f472088a83"
+    },
+    {
+      "skin_id": 897024,
+      "path": "897/897018/897024/897024.fantome",
+      "sha256": "97049a9c550cc3d1c2782fc6731471979bdd74f971c394d90c2b16f7970a8a70"
+    },
+    {
+      "skin_id": 897025,
+      "path": "897/897018/897025/897025.fantome",
+      "sha256": "97bb8906821899baccd69a8ab1ef79bfb5c1f0d081b1ecf1b16b3680b348619a"
+    },
+    {
+      "skin_id": 897026,
+      "path": "897/897018/897026/897026.fantome",
+      "sha256": "4482f9624b4ebf56da57b0757b8c5f3fe82323e3144bb89ab575274e2ec8f191"
+    },
+    {
+      "skin_id": 875077,
+      "path": "875/875076/875077/875077.fantome",
+      "sha256": "cf08b55f878bd4d2f02ffe28033435aff8de48f9a4795886e9b9609b35260494"
+    },
+    {
+      "skin_id": 96066,
+      "path": "96/96065/96066/96066.fantome",
+      "sha256": "345ae4de8358b52b8eb841025cddd2f08f43ce72d76ea8bc5373ff7cde05b443"
+    }
+  ],
+  "names": {
+    "default": {
+      "81078": "HEARTSTEEL Live My Life Ezreal",
+      "141032": "HEARTSTEEL Live My Life Kayn",
+      "523041": "HEARTSTEEL Live My Life Aphelios",
+      "777077": "HEARTSTEEL Live My Life Yone",
+      "897018": "HEARTSTEEL Live My Life K'Sante",
+      "875076": "Prestige HEARTSTEEL Live My Life Sett",
+      "96065": "Prestige Classic Baron Kog'Maw",
+      "81079": "HEARTSTEEL Live My Life Ezreal (Ruby)",
+      "81080": "HEARTSTEEL Live My Life Ezreal (Sapphire)",
+      "81081": "HEARTSTEEL Live My Life Ezreal (Catseye)",
+      "81082": "HEARTSTEEL Live My Life Ezreal (Tanzanite)",
+      "81083": "HEARTSTEEL Live My Life Ezreal (Rose Quartz)",
+      "81084": "HEARTSTEEL Live My Life Ezreal (Obsidian)",
+      "81085": "HEARTSTEEL Live My Life Ezreal (Pearl)",
+      "81086": "HEARTSTEEL Live My Life Ezreal (Peridot)",
+      "141033": "HEARTSTEEL Live My Life Kayn (Ruby)",
+      "141034": "HEARTSTEEL Live My Life Kayn (Rose Quartz)",
+      "141035": "HEARTSTEEL Live My Life Kayn (Catseye)",
+      "141036": "HEARTSTEEL Live My Life Kayn (Tanzanite)",
+      "523042": "HEARTSTEEL Live My Life Aphelios (Ruby)",
+      "523043": "HEARTSTEEL Live My Life Aphelios (Tanzanite)",
+      "523044": "HEARTSTEEL Live My Life Aphelios (Pearl)",
+      "523045": "HEARTSTEEL Live My Life Aphelios (Catseye)",
+      "523046": "HEARTSTEEL Live My Life Aphelios (Peridot)",
+      "523047": "HEARTSTEEL Live My Life Aphelios (Obsidian)",
+      "523048": "HEARTSTEEL Live My Life Aphelios (Rose Quartz)",
+      "523049": "HEARTSTEEL Live My Life Aphelios (Aquamarine)",
+      "777078": "HEARTSTEEL Live My Life Yone (Ruby)",
+      "777079": "HEARTSTEEL Live My Life Yone (Rose Quartz)",
+      "777080": "HEARTSTEEL Live My Life Yone (Catseye)",
+      "777081": "HEARTSTEEL Live My Life Yone (Pearl)",
+      "777082": "HEARTSTEEL Live My Life Yone (Tanzanite)",
+      "777083": "HEARTSTEEL Live My Life Yone (Sapphire)",
+      "777084": "HEARTSTEEL Live My Life Yone (Emerald)",
+      "777085": "HEARTSTEEL Live My Life Yone (Obsidian)",
+      "897019": "HEARTSTEEL Live My Life K'Sante (Ruby)",
+      "897020": "HEARTSTEEL Live My Life K'Sante (Sapphire)",
+      "897021": "HEARTSTEEL Live My Life K'Sante (Turquoise)",
+      "897022": "HEARTSTEEL Live My Life K'Sante (Tanzanite)",
+      "897023": "HEARTSTEEL Live My Life K'Sante (Rose Quartz)",
+      "897024": "HEARTSTEEL Live My Life K'Sante (Obsidian)",
+      "897025": "HEARTSTEEL Live My Life K'Sante (Pearl)",
+      "897026": "HEARTSTEEL Live My Life K'Sante (Catseye)",
+      "875077": "Prestige HEARTSTEEL Live My Life Sett (Vivid)",
+      "96066": "Prestige Classic Baron Kog'Maw (Vivid)"
+    },
+    "en": {
+      "81078": "HEARTSTEEL Live My Life Ezreal",
+      "141032": "HEARTSTEEL Live My Life Kayn",
+      "523041": "HEARTSTEEL Live My Life Aphelios",
+      "777077": "HEARTSTEEL Live My Life Yone",
+      "897018": "HEARTSTEEL Live My Life K'Sante",
+      "875076": "Prestige HEARTSTEEL Live My Life Sett",
+      "96065": "Prestige Classic Baron Kog'Maw",
+      "81079": "HEARTSTEEL Live My Life Ezreal (Ruby)",
+      "81080": "HEARTSTEEL Live My Life Ezreal (Sapphire)",
+      "81081": "HEARTSTEEL Live My Life Ezreal (Catseye)",
+      "81082": "HEARTSTEEL Live My Life Ezreal (Tanzanite)",
+      "81083": "HEARTSTEEL Live My Life Ezreal (Rose Quartz)",
+      "81084": "HEARTSTEEL Live My Life Ezreal (Obsidian)",
+      "81085": "HEARTSTEEL Live My Life Ezreal (Pearl)",
+      "81086": "HEARTSTEEL Live My Life Ezreal (Peridot)",
+      "141033": "HEARTSTEEL Live My Life Kayn (Ruby)",
+      "141034": "HEARTSTEEL Live My Life Kayn (Rose Quartz)",
+      "141035": "HEARTSTEEL Live My Life Kayn (Catseye)",
+      "141036": "HEARTSTEEL Live My Life Kayn (Tanzanite)",
+      "523042": "HEARTSTEEL Live My Life Aphelios (Ruby)",
+      "523043": "HEARTSTEEL Live My Life Aphelios (Tanzanite)",
+      "523044": "HEARTSTEEL Live My Life Aphelios (Pearl)",
+      "523045": "HEARTSTEEL Live My Life Aphelios (Catseye)",
+      "523046": "HEARTSTEEL Live My Life Aphelios (Peridot)",
+      "523047": "HEARTSTEEL Live My Life Aphelios (Obsidian)",
+      "523048": "HEARTSTEEL Live My Life Aphelios (Rose Quartz)",
+      "523049": "HEARTSTEEL Live My Life Aphelios (Aquamarine)",
+      "777078": "HEARTSTEEL Live My Life Yone (Ruby)",
+      "777079": "HEARTSTEEL Live My Life Yone (Rose Quartz)",
+      "777080": "HEARTSTEEL Live My Life Yone (Catseye)",
+      "777081": "HEARTSTEEL Live My Life Yone (Pearl)",
+      "777082": "HEARTSTEEL Live My Life Yone (Tanzanite)",
+      "777083": "HEARTSTEEL Live My Life Yone (Sapphire)",
+      "777084": "HEARTSTEEL Live My Life Yone (Emerald)",
+      "777085": "HEARTSTEEL Live My Life Yone (Obsidian)",
+      "897019": "HEARTSTEEL Live My Life K'Sante (Ruby)",
+      "897020": "HEARTSTEEL Live My Life K'Sante (Sapphire)",
+      "897021": "HEARTSTEEL Live My Life K'Sante (Turquoise)",
+      "897022": "HEARTSTEEL Live My Life K'Sante (Tanzanite)",
+      "897023": "HEARTSTEEL Live My Life K'Sante (Rose Quartz)",
+      "897024": "HEARTSTEEL Live My Life K'Sante (Obsidian)",
+      "897025": "HEARTSTEEL Live My Life K'Sante (Pearl)",
+      "897026": "HEARTSTEEL Live My Life K'Sante (Catseye)",
+      "875077": "Prestige HEARTSTEEL Live My Life Sett (Vivid)",
+      "96066": "Prestige Classic Baron Kog'Maw (Vivid)"
+    },
+    "tr": {
+      "81078": "HEARTSTEEL Live My Life Ezreal",
+      "141032": "HEARTSTEEL Live My Life Kayn",
+      "523041": "HEARTSTEEL Live My Life Aphelios",
+      "777077": "HEARTSTEEL Live My Life Yone",
+      "897018": "HEARTSTEEL Live My Life K'Sante",
+      "875076": "Prestij HEARTSTEEL Live My Life Sett",
+      "96065": "Prestij Klasik Baron Kog'Maw",
+      "81079": "HEARTSTEEL Live My Life Ezreal (Yakut)",
+      "81080": "HEARTSTEEL Live My Life Ezreal (Safir)",
+      "81081": "HEARTSTEEL Live My Life Ezreal (Kedigözü)",
+      "81082": "HEARTSTEEL Live My Life Ezreal (Tanzanit)",
+      "81083": "HEARTSTEEL Live My Life Ezreal (Pembe Kuvars)",
+      "81084": "HEARTSTEEL Live My Life Ezreal (Obsidiyen)",
+      "81085": "HEARTSTEEL Live My Life Ezreal (İnci Beyazı)",
+      "81086": "HEARTSTEEL Live My Life Ezreal (Fıstık Yeşili)",
+      "141033": "HEARTSTEEL Live My Life Kayn (Yakut)",
+      "141034": "HEARTSTEEL Live My Life Kayn (Pembe Kuvars)",
+      "141035": "HEARTSTEEL Live My Life Kayn (Kedigözü)",
+      "141036": "HEARTSTEEL Live My Life Kayn (Tanzanit)",
+      "523042": "HEARTSTEEL Live My Life Aphelios (Yakut)",
+      "523043": "HEARTSTEEL Live My Life Aphelios (Tanzanit)",
+      "523044": "HEARTSTEEL Live My Life Aphelios (İnci Beyazı)",
+      "523045": "HEARTSTEEL Live My Life Aphelios (Kedigözü)",
+      "523046": "HEARTSTEEL Live My Life Aphelios (Fıstık Yeşili)",
+      "523047": "HEARTSTEEL Live My Life Aphelios (Obsidiyen)",
+      "523048": "HEARTSTEEL Live My Life Aphelios (Pembe Kuvars)",
+      "523049": "HEARTSTEEL Live My Life Aphelios (Deniz Mavisi)",
+      "777078": "HEARTSTEEL Live My Life Yone (Yakut)",
+      "777079": "HEARTSTEEL Live My Life Yone (Pembe Kuvars)",
+      "777080": "HEARTSTEEL Live My Life Yone (Kedigözü)",
+      "777081": "HEARTSTEEL Live My Life Yone (İnci Beyazı)",
+      "777082": "HEARTSTEEL Live My Life Yone (Tanzanit)",
+      "777083": "HEARTSTEEL Live My Life Yone (Safir)",
+      "777084": "HEARTSTEEL Live My Life Yone (Zümrüt)",
+      "777085": "HEARTSTEEL Live My Life Yone (Obsidiyen)",
+      "897019": "HEARTSTEEL Live My Life K'Sante (Yakut)",
+      "897020": "HEARTSTEEL Live My Life K'Sante (Safir)",
+      "897021": "HEARTSTEEL Live My Life K'Sante (Turkuvaz)",
+      "897022": "HEARTSTEEL Live My Life K'Sante (Tanzanit)",
+      "897023": "HEARTSTEEL Live My Life K'Sante (Pembe Kuvars)",
+      "897024": "HEARTSTEEL Live My Life K'Sante (Obsidiyen)",
+      "897025": "HEARTSTEEL Live My Life K'Sante (İnci Beyazı)",
+      "897026": "HEARTSTEEL Live My Life K'Sante (Kedigözü)",
+      "875077": "Prestij HEARTSTEEL Live My Life Sett (Kuvvetli)",
+      "96066": "Prestij Klasik Baron Kog'Maw (Kuvvetli)"
+    }
+  },
+  "validation": {
+    "offline": "BIN roundtrip, dependency, ZIP CRC, WAD content, import, overlay checks passed for all 45 packages",
+    "live": "Kayn 141032 and both transformations confirmed by user; other skins/chromas not live-tested"
+  }
+}

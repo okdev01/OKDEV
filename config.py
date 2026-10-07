@@ -25,7 +25,7 @@ log = logging.getLogger(__name__)
 # APPLICATION METADATA
 # =============================================================================
 
-APP_VERSION = "1.5.0"                           # Independently versioned OKDEV release
+APP_VERSION = "1.5.1"                           # Independently versioned OKDEV release
 UPSTREAM_VERSION = "1.4.4"                      # Original Rose source baseline
 APP_USER_AGENT = f"OKDEV/{APP_VERSION}"  # User-Agent header for HTTP requests
 GAME_EXECUTABLE_NAMES = ("League of Legends.exe", "League of Legends (TM) Client.exe")

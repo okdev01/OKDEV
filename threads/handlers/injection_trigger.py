@@ -1578,10 +1578,6 @@ class InjectionTrigger:
                 import traceback
                 log.debug(f"[MOD_HISTORIC] Traceback: {traceback.format_exc()}")
             
-            # Stop monitor after injection completes
-            if self.injection_manager:
-                self.injection_manager._stop_monitor()
-            
             if result == 0:
                 log.info("=" * LOG_SEPARATOR_WIDTH)
                 injection_label = " + ".join([m.upper() for m in mod_names_list])
@@ -1670,4 +1666,13 @@ class InjectionTrigger:
             log.error(f"[INJECT] Error injecting custom mod: {e}")
             import traceback
             log.error(f"[INJECT] Traceback: {traceback.format_exc()}")
+        finally:
+            # Preparation can return before mk_run_overlay (missing carrier,
+            # failed extraction, no mods). Prevent a later game launch from
+            # being suspended and release a game already held by this monitor.
+            if self.injection_manager:
+                try:
+                    self.injection_manager.resume_game()
+                finally:
+                    self.injection_manager._stop_monitor()
 
