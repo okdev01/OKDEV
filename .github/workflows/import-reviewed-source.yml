@@ -1,4 +1,4 @@
-name: Import verified OKDEV 1.5 source
+name: Import verified OKDEV 1.5.1 source
 on:
   workflow_dispatch:
     inputs:
@@ -7,7 +7,7 @@ on:
         required: true
         type: string
       bundle_sha256:
-        description: SHA-256 of the matching source bundle in draft v1.5.0
+        description: SHA-256 of the matching source bundle in draft v1.5.1
         required: true
         type: string
       expected_main:
@@ -48,11 +48,11 @@ jobs:
           [[ "$EXPECTED_MAIN" =~ ^[a-f0-9]{40}$ ]]
           test "$(git rev-parse HEAD)" = "$EXPECTED_MAIN"
           asset="OKDEV_Source_${SOURCE_COMMIT:0:12}.bundle"
-          gh release download v1.5.0 --repo okdev01/OKDEV --pattern "$asset" --dir "$RUNNER_TEMP/okdev-source"
+          gh release download v1.5.1 --repo okdev01/OKDEV --pattern "$asset" --dir "$RUNNER_TEMP/okdev-source"
           bundle="$RUNNER_TEMP/okdev-source/$asset"
           printf '%s  %s\n' "$BUNDLE_SHA256" "$bundle" | sha256sum --check --strict -
           git bundle verify "$bundle"
-          git fetch "$bundle" refs/heads/professional-1.5.0
+          git fetch "$bundle" refs/heads/professional-1.5.1
           test "$(git rev-parse FETCH_HEAD)" = "$SOURCE_COMMIT"
           git merge-base --is-ancestor 05eacf52e706fab9296546a779d9733f7274d8d2 FETCH_HEAD
           # Workflow files are reviewed/uploaded through GitHub separately.
@@ -62,7 +62,7 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           if ! git diff --cached --quiet; then
-            git commit -m "Import verified OKDEV 1.5 source $SOURCE_COMMIT"
+            git commit -m "Import verified OKDEV 1.5.1 source $SOURCE_COMMIT"
           fi
           git diff --exit-code FETCH_HEAD HEAD -- . ':(exclude).github/workflows'
           git push origin HEAD:main
