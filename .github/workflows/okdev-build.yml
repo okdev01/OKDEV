@@ -41,12 +41,16 @@ jobs:
         run: node test/guide_plugin.cjs
       - name: Test updater shutdown
         run: python -m unittest test.test_updater_shutdown
+      - name: Test LTK update verification and interrupted replacement
+        run: python -m unittest test.test_ltk_update -v
       - name: Compile application and native components
         run: python scripts/build_pyinstaller.py
       - name: Build setup executable
         run: python scripts/build_okdev_setup.py
       - name: Build automatic update package
         run: python scripts/create_update_package.py
+      - name: Build LTK repair bridge for older clients
+        run: python scripts/build_ltk_repair.py
       - name: Verify candidate contents without launching windows
         run: python scripts/check_release_candidate.py
       - name: Upload release candidates
