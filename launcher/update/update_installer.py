@@ -56,9 +56,12 @@ class UpdateInstaller:
 
     def launch_updater(self, params, install_dir, updates_root, zip_path, staging_dir, status_callback):
         try:
-            subprocess.Popen([str(params['helper']), '--pid', str(params['pid']),
+            command = [str(params['helper']), '--pid', str(params['pid']),
                 '--install-dir', str(params['install']), '--staging-dir', str(params['payload']),
-                '--log-file', str(params['log'])], close_fds=True, cwd=updates_root,
+                '--log-file', str(params['log'])]
+            if params.get('restart_client'):
+                command.append('--restart-client-ux')
+            subprocess.Popen(command, close_fds=True, cwd=updates_root,
                 creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
             return True
         except OSError as exc:

@@ -103,7 +103,9 @@ def _confirm_update(dialog: UpdateDialog, remote_version: str, local_version: st
         f"Yeni OKDEV sürümü mevcut.\n\n"
         f"Mevcut sürüm: {local_version}\n"
         f"Yeni sürüm: {remote_version}\n\n"
-        "Şimdi indirip kurmak ister misiniz?"
+        "Şimdi indirip güncellemek ister misiniz?\n\n"
+        "Maç, sıra veya şampiyon seçimi varsa uygun zamana kadar beklenir. "
+        "Güncelleme sırasında League arayüzü otomatik kapanıp açılır; oturumunuz korunur."
     )
     result = user32.MessageBoxW(
         dialog.hwnd or None,
@@ -214,6 +216,10 @@ def _run_launcher_dialog(dev_mode: bool, test_download_fail: bool) -> None:
 
         def worker():
             try:
+                if not dev_mode:
+                    from config import get_config_file_path
+                    from okdev_client_update import recover_client
+                    recover_client(get_config_file_path().parent/'updates/client-ux-resume.json')
                 _perform_update(dialog, dev_mode=dev_mode)
 
                 if not dev_mode:

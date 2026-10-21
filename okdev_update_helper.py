@@ -86,7 +86,15 @@ def main():
     parser.add_argument('--install-dir', type=Path, required=True)
     parser.add_argument('--staging-dir', type=Path, required=True)
     parser.add_argument('--log-file', type=Path, required=True)
+    parser.add_argument('--restart-client-ux', action='store_true')
     args = parser.parse_args()
+    import re
+    updates_root = args.log_file.parent
+    if re.fullmatch(r'\d+\.\d+\.\d+', updates_root.name):
+        updates_root = updates_root.parent
+    client = None
+    error = None
+    committed = False
     try:
         # An inherited working directory inside the installation locks its rename on Windows.
         import os
@@ -95,8 +103,19 @@ def main():
             psutil.Process(args.pid).wait(timeout=90)
         except psutil.NoSuchProcess:
             pass
+        if args.restart_client_ux:
+            from okdev_client_update import ClientPause
+            client = ClientPause(updates_root/'client-ux-resume.json')
+            client.pause()
         wait_for_install_exit(args.install_dir)
+        if client is not None:
+            client.require_safe()
         backup = apply_update(args.install_dir, args.staging_dir)
+        committed = True
+        if client is not None and client.resume_needed:
+            from okdev_client_update import sync_runtime
+            sync_runtime(args.install_dir)
+        (updates_root/'pending-update.json').unlink(missing_ok=True)
         args.log_file.write_text('Update installed. Backup: '+str(backup), encoding='utf-8')
         from okdev_branding import refresh_shortcut
         try:
@@ -104,12 +123,24 @@ def main():
         except (OSError, subprocess.SubprocessError):
             pass  # A shortcut failure does not invalidate a committed update.
     except Exception as exc:
-        args.log_file.write_text('Update failed; previous installation retained: '+str(exc), encoding='utf-8')
-        import ctypes
-        ctypes.windll.user32.MessageBoxW(None, str(exc), 'OKDEV güncelleme tamamlanamadı', 0x10)
+        error = str(exc)
+        prefix = 'Update installed; client runtime refresh failed: ' if committed else 'Update failed; previous installation retained: '
+        args.log_file.write_text(prefix+error, encoding='utf-8')
+        # Keep the download, but stop automatic retry loops after a failed apply.
+        (updates_root/'pending-update.json').unlink(missing_ok=True)
     finally:
+        if client is not None:
+            try:
+                client.resume()
+            except Exception as exc:
+                error = str(exc)
+                with args.log_file.open('a', encoding='utf-8') as stream:
+                    stream.write('\nLeague arayüzü kurtarma bekliyor: '+str(exc))
         if (args.install_dir/'OKDEV.exe').is_file():
             subprocess.Popen([str(args.install_dir/'OKDEV.exe')], cwd=args.install_dir)
+        if error:
+            import ctypes
+            ctypes.windll.user32.MessageBoxW(None, error, 'OKDEV güncelleme tamamlanamadı', 0x10)
 
 
 if __name__ == '__main__':

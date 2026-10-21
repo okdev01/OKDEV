@@ -50,14 +50,11 @@ class UpdateSequence:
         asset = self.github_client.get_zip_asset(release)
         if not asset:
             return False
-        import psutil
-        if any((p.info.get('name') or '').lower() in {'leagueclientux.exe', 'leagueclientuxrender.exe', 'league of legends.exe'}
-               for p in psutil.process_iter(['name'])):
-            status('OKDEV güncellemesi hazır; oyun istemcisi kapalıyken uygulanacak')
+        from .pending import updater_running
+        if updater_running():
+            status('Bir OKDEV güncellemesi zaten çalışıyor.')
             return False
-        if confirm is None or not confirm(remote, APP_VERSION):
-            return False
-        root = get_config_file_path().parent/'updates'
+        root = get_config_file_path().parent/'updates'/remote.lstrip('v')
         root.mkdir(parents=True, exist_ok=True)
         archive = root/asset['name']
         checksum_asset = next((a for a in release.get('assets', []) if a.get('name') == asset['name']+'.sha256'), None)
@@ -72,7 +69,16 @@ class UpdateSequence:
                 raise ValueError('Geçersiz paket özeti')
         else:
             raise ValueError('Paket doğrulama bilgisi bulunamadı')
-        if not self.downloader.download_update(asset['browser_download_url'], archive, status, byte_progress, asset.get('size')):
+        from .pending import approved, remember
+        install = Path(sys.executable).resolve().parent
+        consent = approved(remote, expected, install)
+        if not consent and (confirm is None or not confirm(remote, APP_VERSION)):
+            return False
+        reusable = False
+        if archive.is_file():
+            with archive.open('rb') as stream:
+                reusable = hashlib.file_digest(stream, 'sha256').hexdigest() == expected
+        if not reusable and not self.downloader.download_update(asset['browser_download_url'], archive, status, byte_progress, asset.get('size')):
             return False
         with archive.open('rb') as stream:
             actual = hashlib.file_digest(stream, 'sha256').hexdigest()
@@ -86,6 +92,12 @@ class UpdateSequence:
         manifest = json.loads((extracted/'okdev-update.json').read_text(encoding='utf-8'))
         if _parse_semver_like(manifest.get('version')) != parsed:
             raise ValueError('Paket sürümü yayımlanan sürümle eşleşmiyor')
-        install = Path(sys.executable).resolve().parent
+        remember(remote, expected, install)
+        from okdev_client_update import safe_to_update
+        if not safe_to_update():
+            status('Güncelleme indirildi; maç ve seçim bittikten sonra otomatik uygulanacak.')
+            return False
         params = self.installer.prepare_updater_launch(extracted, install, root, archive, staging, status)
+        if params:
+            params['restart_client'] = True
         return bool(params and self.installer.launch_updater(params, install, root, archive, staging, status))

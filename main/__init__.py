@@ -530,6 +530,8 @@ def run_league_unlock(args: Optional[argparse.Namespace] = None,
     lcu, skin_scraper, state, injection_manager = initialize_core_components(args, injection_threshold)
     from hub.helpers import start_helpers
     start_helpers(state)
+    from launcher.update.pending import start_watcher
+    start_watcher(state)
     
     # Configure skin writing based on the final injection threshold (seconds → ms)
     state.skin_write_ms = max(0, int(injection_manager.injection_threshold * 1000))

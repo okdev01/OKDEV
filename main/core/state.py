@@ -9,6 +9,7 @@ class AppState:
     """Application state to replace global variables"""
     def __init__(self):
         self.shutting_down = False
+        self.updating = False
         self.lock_file = None
         self.lock_file_path = None
 

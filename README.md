@@ -2,6 +2,14 @@
 
 Windows için bağımsız sürümlenen OKDEV istemcisi.
 
+## 1.5.3: League oturumu açıkken uygulama güncellemesi
+
+Onaylanan güncelleme League açıkken de indirilir. Maç, sıra, hazır kontrolü, şampiyon seçimi veya durumu okunamayan istemci varken uygulanmaz. Paket doğrulanmış olarak bekler; OKDEV çalışmaya devam eder. İstemci ana ekrana, lobiye veya maç sonuna geldiğinde durum yeniden kontrol edilir ve normal OKDEV kapanışıyla güncelleme başlatılır. Aynı doğrulanmış paket için yeniden indirme veya tekrar onay gerekmez.
+
+Güncelleyici Riot/League oturumunu ve League arka uç işlemini açık tutar; yalnızca arayüzü yerel istemci API’siyle durdurur. Eski dosyalar yedekli değiştirilir. Arayüz geri açılmadan önce OKDEV eklentilerinin çalışma kopyası yenilenir; kullanıcı ayarları, datastore ve eklenti açma/kapama seçimleri korunur. Hata durumunda arayüz geri açılır; yarım kalan arayüz açma isteği sonraki OKDEV başlangıcında kurtarılır. League veya oyun işlemi zorla sonlandırılmaz.
+
+**1.5.2’den ilk geçiş:** 1.5.2’nin mevcut güncelleyicisi League açıkken çalışmadığı için League istemcisini bir kez kapatıp OKDEV’i açarak 1.5.3 güncellemesini onaylayın. Yeniden Setup indirmek gerekmez. İstemciyi elle kapatmadan güncelleme akışı 1.5.3’ten sonraki geçişlerde kullanılabilir. Daha eski “Patcher Outdated” ekranında kalan kurulumlar için 1.5.3 onarım aracı da yayımlanır.
+
 ## 1.5.2: Otomatik LTK onarımı
 
 OKDEV sürüm kontrolü LTK denetiminden önce çalışır. LTK eksik, bozuk veya kurulu oyun derlemesi için eskiyse resmî LeagueToolkit GitHub sürümündeki değiştirilmemiş kurulum paketi doğrudan indirilir. Paket boyutu ve GitHub SHA-256 özeti doğrulanır; kurulum programı çalıştırılmadan yalnızca iki patcher dosyası çıkarılır. Yeni çiftin oyun derlemesini desteklediği doğrulanmadan mevcut dosyalara dokunulmaz. Güncel LTK için indirme yapılmaz. Açık maç veya çalışan patcher varken dosyalar değiştirilmez.

@@ -34,7 +34,8 @@ def perform_cleanup(state: SharedState, thread_manager: ThreadManager, tray_mana
             log.warning(f"Error resuming suspended game during cleanup: {e}")
 
     try:
-        pengu_loader.deactivate_on_exit()
+        if not get_app_state().updating:
+            pengu_loader.deactivate_on_exit()
     except Exception as e:
         log.warning(f"Error deactivating Pengu Loader during cleanup: {e}")
 

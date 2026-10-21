@@ -71,7 +71,9 @@ def main():
     changed_modules += ['config', 'utils.core.mod_historic', 'utils.core.data_migration',
         'utils.download.bundled_skins', 'utils.download.skin_downloader',
         'utils.integration.pengu_loader', 'injection.config.config_manager', 'okdev_install_paths',
-        'injection.mods.storage', 'threads.handlers.injection_trigger', 'pengu.communication.message_handler', 'main']
+        'injection.mods.storage', 'threads.handlers.injection_trigger', 'pengu.communication.message_handler', 'main',
+        'okdev_client_update', 'okdev_ltk_update', 'launcher.update.pending', 'launcher.update.update_sequence',
+        'launcher.update.update_installer', 'launcher.core.launcher', 'main.core.cleanup', 'main.core.state']
     for module in changed_modules:
         source = ROOT / (module.replace('.', '/') + '.py')
         if module == 'main':
@@ -90,6 +92,10 @@ def main():
         check(normalized_code(compile(source_path.read_bytes(), str(source_path), 'exec', dont_inherit=True))
               == normalized_code(marshal.loads(packed.extract(entry))), label + ': current compiled entry point')
         embedded = packed.open_embedded_archive(next(name for name in packed.toc if name.endswith('.pyz')))
+        if label == 'updater':
+            source = ROOT/'okdev_client_update.py'
+            check(normalized_code(compile(source.read_bytes(), str(source), 'exec', dont_inherit=True))
+                  == normalized_code(embedded.extract('okdev_client_update')), 'updater: current client pause/resume module')
         for module in ('okdev_install_transaction', 'hub.locking', 'utils.core.atomic_file'):
             source = ROOT / (module.replace('.', '/') + '.py')
             check(module in embedded.toc, label + ': bundled transaction module ' + module)
