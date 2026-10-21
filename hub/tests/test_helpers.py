@@ -32,6 +32,13 @@ class HelperIsolationTests(LibraryFixture):
         helpers.tick_helpers(self.lcu, self.accept, self.tracker, self.log)
         self.tracker.update.assert_called_once()
 
+    def test_failed_ban_does_not_prevent_other_helpers(self):
+        ban = Mock()
+        ban.tick.side_effect = TimeoutError()
+        helpers.tick_helpers(self.lcu, self.accept, self.tracker, self.log, ban)
+        self.accept.tick.assert_called_once()
+        self.tracker.update.assert_called_once()
+
     def test_lcu_failure_clears_stale_connection_state(self):
         self.lcu.refresh_if_needed.side_effect = OSError()
         helpers.tick_helpers(self.lcu, self.accept, self.tracker, self.log)

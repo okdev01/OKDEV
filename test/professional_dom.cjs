@@ -20,6 +20,7 @@ const state = {installed, catalog:[], profiles:{}, removed:[], settings:{favorit
 const ok = value => ({ok:true,result:value});
 const record = name => async (...args) => {calls.push([name,...args]);return ok();};
 const api = {
+  save_preferences:async changes=>{Object.assign(state.preferences,changes);calls.push(['preferences',changes]);return ok(state.preferences);},
   snapshot:async()=>structuredClone(state),
   diagnostics:async()=>ok({version:'1.5.0',checked_at:new Date().toISOString(),note:'Local check',checks:[],storage:[{id:'mods',name:'Mod dosyaları',bytes:2048,files:2,complete:true},{id:'backups',name:'Yerel yedekler',bytes:4096,files:4,complete:false}]}),
   guide_state:async()=>({guide:{},companion:{},preferences:state.preferences}),
@@ -57,6 +58,16 @@ const named=(host,name)=>[...document.querySelectorAll(host+' button')].find(but
   try {
     window.dispatchEvent(new window.Event('pywebviewready'));await settle();
     assert.deepEqual(errors,[]);
+    assert.equal($('autoBanEnabled').disabled,true);
+    for(const name of ['Ahri','Master Yi']) { $('banChampion').value=name;await click('#addBanChampion'); }
+    assert.equal(document.querySelectorAll('#banPriority li').length,2);
+    assert.equal($('autoBanEnabled').disabled,false);
+    await click(document.querySelector('#banPriority li button:nth-child(2)'));
+    assert.equal(state.preferences.auto_ban_priority[0],11);
+    await click(document.querySelector('#banPriority li button:last-child'));
+    await click(document.querySelector('#banPriority li button:last-child'));
+    assert.equal(state.preferences.auto_ban_enabled,false);
+    assert.equal($('autoBanEnabled').disabled,true);
     assert.equal(document.querySelectorAll('#catalogGrid .card').length,24);
     assert.equal(document.querySelectorAll('#installedGrid .card').length,24);
     assert.ok(calls.filter(c=>c[0]==='covers').flatMap(c=>c[1]).length<=3,'Home fetches only recent covers');

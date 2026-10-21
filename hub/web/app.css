@@ -27,3 +27,4 @@
 #importReplaceDialog{width:490px;max-height:85vh;overflow:auto}#importReplaceDialog p{overflow-wrap:anywhere}
 
 .storage-summary{margin-top:22px}.storage-summary h2{font-size:18px}.storage-summary>p{line-height:1.7}.storage-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:20px 0}.storage-card{padding:16px;border:1px solid var(--line);border-radius:10px;display:grid;gap:8px}.storage-card h3{font-size:12px;font-weight:500;margin:0;color:var(--muted)}.storage-card strong{font-size:20px;overflow-wrap:anywhere}.storage-card span{font-size:11px}@media(max-width:1050px){.storage-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:650px){.storage-grid{grid-template-columns:1fr}}
+.ban-composer{display:flex;gap:8px;margin:16px 0}.ban-composer input{min-width:0;flex:1}.ban-row{padding:10px 0;display:list-item}.ban-actions{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap}.ban-actions button{padding:6px 10px;font-size:12px}

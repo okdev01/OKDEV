@@ -125,6 +125,7 @@ if (typeof document !== 'undefined') {
     $('main').setAttribute('aria-busy', String(busy));
     renderBulk();
     $('clearDownloads').disabled = busy || !api || !(state.downloads?.jobs || []).some(j => !['queued', 'downloading', 'installing'].includes(j.status));
+    renderBanPriority();
   }
   function button(label, action, {primary = false, remote = false} = {}) {
     const b = element('button', primary ? 'primary' : '', label);
@@ -393,6 +394,36 @@ if (typeof document !== 'undefined') {
     }
     target.append(actions); $('detailDialog').showModal(); loadVisibleCovers();
   }
+  let banListSignature = '';
+  function renderBanPriority() {
+    const ids = state.preferences.auto_ban_priority || [];
+    const signature = JSON.stringify(ids);
+    $('autoBanEnabled').disabled = busy || !api || !ids.length;
+    $('addBanChampion').disabled = busy || !api || ids.length >= 10;
+    document.querySelectorAll('#banPriority button').forEach(control => { control.disabled = busy || !api || control.dataset.boundary === 'true'; });
+    if (signature === banListSignature) return;
+    banListSignature = signature;
+    $('banPriority').replaceChildren();
+    const save = next => act(() => api.save_preferences({auto_ban_priority:next, ...(next.length ? {} : {auto_ban_enabled:false})}), 'Ban listesi kaydedildi.');
+    ids.forEach((id, index) => {
+      const champion = boot.champions.find(c => c.id === id);
+      const name = champion ? champion.name : String(id);
+      const row = element('li', 'ban-row');
+      row.append(element('span', '', name));
+      const actions = element('div', 'ban-actions');
+      for (const [label, delta] of [['Yukarı', -1], ['Aşağı', 1]]) {
+        const control = button(label, () => { const next = [...ids]; [next[index], next[index + delta]] = [next[index + delta], next[index]]; save(next); });
+        control.setAttribute('aria-label', name + ' ' + label.toLocaleLowerCase('tr'));
+        control.disabled = index + delta < 0 || index + delta >= ids.length;
+        control.dataset.boundary = String(control.disabled);
+        actions.append(control);
+      }
+      const remove = button('Kaldır', () => save(ids.filter(c => c !== id)));
+      remove.setAttribute('aria-label', name + ' kaldır');
+      actions.append(remove); row.append(actions); $('banPriority').append(row);
+    });
+    $('banListStatus').textContent = ids.length ? 'Yukarıdaki şampiyonlara öncelik verilir.' : 'Başlamak için bir şampiyon ekle. Otomatik ban kapalı.';
+  }
   function applyPreferences() {
     const prefs = state.preferences || {};
     const theme = prefs.theme || 'dark';
@@ -405,6 +436,7 @@ if (typeof document !== 'undefined') {
       else if (value !== undefined) control.value = value;
     });
     $('settingsHotkey').textContent = prefs.mobalytics_hotkey || 'Ctrl+Shift+B';
+    renderBanPriority();
   }
   function renderGuide() {
     const guide = state.guide || {}, pick = guide.pick, prefs = state.preferences || {}, companion = state.companion || {};
@@ -736,6 +768,17 @@ if (typeof document !== 'undefined') {
     act(() => api.publish_mod(fields, token), 'Mod yayımlandı. Katalog birkaç dakika içinde yenilenebilir.');
   };
   $('importCategory').onchange = updateCategory;
+  $('addBanChampion').onclick = () => {
+    const champion = boot.champions.find(c => HubView.normalize(c.name) === HubView.normalize($('banChampion').value.trim()));
+    const ids = state.preferences.auto_ban_priority || [];
+    if (!champion || ids.includes(champion.id) || ids.length >= 10) {
+      $('banListStatus').textContent = 'Listede olmayan geçerli bir şampiyon seç (en fazla 10).';
+      return;
+    }
+    act(() => api.save_preferences({auto_ban_priority:[...ids, champion.id]}), 'Şampiyon eklendi.');
+    $('banChampion').value = '';
+  };
+  $('banChampion').onkeydown = event => { if (event.key === 'Enter') { event.preventDefault(); $('addBanChampion').click(); } };
   boot.champions.forEach(c => { const o = element('option'); o.value = c.name; $('championList').append(o); });
   $('championName').oninput = () => {
     const c = boot.champions.find(c => HubView.normalize(c.name) === HubView.normalize($('championName').value));
