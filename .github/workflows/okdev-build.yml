@@ -40,7 +40,7 @@ jobs:
       - name: Test client guide controls and in-page navigation
         run: node test/guide_plugin.cjs
       - name: Test updater shutdown
-        run: python -m unittest test.test_updater_shutdown
+        run: python -m unittest test.test_updater_shutdown test.test_client_update test.test_pending_update test.test_client_update_helper
       - name: Test LTK update verification and interrupted replacement
         run: python -m unittest test.test_ltk_update -v
       - name: Compile application and native components
