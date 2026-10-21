@@ -27,6 +27,25 @@ class AutoBanTests(LibraryFixture):
         self.assertTrue(self.run_tick())
         self.assertEqual(self.lcu.s.patch.call_args.kwargs['json'], {'championId': 11, 'completed': True})
 
+    def test_negative_unselected_champion_is_eligible(self):
+        self.session['actions'][0][0]['championId'] = -1
+        self.assertTrue(self.run_tick())
+        self.assertEqual(self.lcu.s.patch.call_args.kwargs['json'], {'championId': 11, 'completed': True})
+        self.assertEqual(self.ban.status, 'ban-completed')
+
+    def test_completed_empty_ban_is_never_changed(self):
+        self.session['actions'][0][0].update(championId=-1, completed=True, isInProgress=False)
+        self.assertFalse(self.run_tick())
+        self.lcu.s.patch.assert_not_called()
+
+    def test_rejected_request_is_reported_and_not_retried(self):
+        self.lcu.s.patch.return_value.ok = False
+        self.lcu.s.patch.return_value.status_code = 400
+        self.assertFalse(self.run_tick())
+        self.assertEqual(self.ban.status, 'request-rejected-400')
+        self.assertFalse(self.run_tick())
+        self.assertEqual(self.lcu.s.patch.call_count, 1)
+
     def test_late_hover_uses_next_candidate(self):
         second = deepcopy(self.session)
         second['myTeam'].append({'championPickIntent': 11})

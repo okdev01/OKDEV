@@ -86,3 +86,18 @@ class CompanionTests(LibraryFixture):
         self.assertEqual(companion.window_rectangle((0, 0, 1920, 1040), 'right', 'compact')[2:], (400, 560))
         self.assertEqual(companion.window_rectangle((0, 0, 1920, 1040), 'right', 'wide')[2:], (600, 800))
         self.assertEqual(companion.window_rectangle((0, 0, 1920, 1040), 'right', 'unknown')[2:], (470, 720))
+
+    def test_hotkey_retries_after_conflict_without_reregistering_success(self):
+        from unittest.mock import Mock
+        hotkey = companion.WindowsHotkey.__new__(companion.WindowsHotkey)
+        hotkey.user32 = Mock()
+        hotkey.user32.RegisterHotKey.side_effect = [False, True]
+        hotkey.key, hotkey.registered, hotkey.last_attempt = None, False, 0
+        with patch.object(companion.time, 'monotonic', return_value=100):
+            self.assertFalse(hotkey.set('Ctrl+Shift+B'))
+            self.assertFalse(hotkey.set('Ctrl+Shift+B'))
+        self.assertEqual(hotkey.user32.RegisterHotKey.call_count, 1)
+        with patch.object(companion.time, 'monotonic', return_value=106):
+            self.assertTrue(hotkey.set('Ctrl+Shift+B'))
+            self.assertTrue(hotkey.set('Ctrl+Shift+B'))
+        self.assertEqual(hotkey.user32.RegisterHotKey.call_count, 2)

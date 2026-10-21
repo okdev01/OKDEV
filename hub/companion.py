@@ -130,12 +130,14 @@ class WindowsHotkey:
         self.user32.PeekMessageW.argtypes = (ctypes.POINTER(wintypes.MSG), wintypes.HWND, wintypes.UINT, wintypes.UINT, wintypes.UINT)
         self.key = None
         self.registered = False
+        self.last_attempt = 0
 
     def set(self, key):
-        if key == self.key:
+        if key == self.key and (self.registered or time.monotonic() - self.last_attempt < 5):
             return self.registered
         self.close()
         self.key = key
+        self.last_attempt = time.monotonic()
         if key in HOTKEYS:
             modifiers, vk = HOTKEYS[key]
             self.registered = bool(self.user32.RegisterHotKey(None, 0x4F4B, modifiers | 0x4000, vk))
@@ -197,7 +199,8 @@ def run():
             base = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parents[1]))
             source = (base / 'hub/web/guide.js').read_text(encoding='utf-8')
             key = json.dumps(preferences.get()['mobalytics_hotkey'])
-            window.evaluate_js('window.OKDEV_GUIDE_HOTKEY=' + key + ';' + source)
+            section = 'items' if guides.read_state().get('phase') in guides.GAME_PHASES else 'runes'
+            window.evaluate_js('window.OKDEV_GUIDE_HOTKEY=' + key + ';window.OKDEV_GUIDE_SECTION=' + json.dumps(section) + ';' + source)
         except Exception:
             # Site navigation still works if its document is being replaced.
             pass
@@ -261,6 +264,7 @@ def run():
                         window.load_url(payload)
                         window.set_title(machine.title.replace('Ctrl+Shift+B', prefs['mobalytics_hotkey']))
                     elif event == 'show':
+                        install_navigation()
                         position_window(hwnd, *layout)
                         user32.ShowWindow(hwnd, 4)  # SW_SHOWNOACTIVATE
                     elif event == 'hide':

@@ -7,6 +7,7 @@
   if (previous) {
     const key = previous.shadowRoot?.querySelector('.key');
     if (key) key.textContent = window.OKDEV_GUIDE_HOTKEY || 'Ctrl+Shift+B';
+    previous.dispatchEvent(new Event('okdev-section'));
     return;
   }
   const host = document.createElement('div'); host.id = 'okdev-guide-navigation';
@@ -30,9 +31,16 @@
   });
   const key=document.createElement('span');key.className='key';key.textContent=window.OKDEV_GUIDE_HOTKEY||'Ctrl+Shift+B';key.title='Rehberi göster / gizle';bar.append(key);
   root.append(style,bar,feedback);document.documentElement.append(host);
-  let attempts=0, stopped=false;
+  let attempts=0, stopped=false, timer, section;
+  const selectSection=()=>{
+    const next=window.OKDEV_GUIDE_SECTION==='items'?'items':'runes';
+    if(next===section)return;
+    section=next; attempts=0; stopped=false; clearInterval(timer);
+    timer=setInterval(()=>{if(stopped||!host.isConnected||++attempts>30||jump(section))clearInterval(timer);},350);
+  };
+  host.addEventListener('okdev-section',selectSection);
   // Stop automatic scrolling as soon as the user interacts with the page.
   const stop=()=>{stopped=true;};
-  window.addEventListener('wheel',stop,{once:true,passive:true});window.addEventListener('pointerdown',stop,{once:true,passive:true});
-  const timer=setInterval(()=>{if(stopped||!host.isConnected||++attempts>30||jump('runes'))clearInterval(timer);},350);
+  window.addEventListener('wheel',stop,{passive:true});window.addEventListener('pointerdown',stop,{passive:true});
+  selectSection();
 })();

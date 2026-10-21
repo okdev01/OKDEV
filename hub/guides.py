@@ -66,6 +66,35 @@ def locked_pick(session):
             'url': build_url(champion_id, role)}
 
 
+def game_pick(session, summoner):
+    """Recover only the local player's champion from the current game."""
+    if not isinstance(session, dict) or not isinstance(summoner, dict):
+        return None
+    data = session.get('gameData')
+    if not isinstance(data, dict):
+        return None
+    for team in ('teamOne', 'teamTwo'):
+        players = data.get(team)
+        if not isinstance(players, list):
+            continue
+        for player in players:
+            if not isinstance(player, dict):
+                continue
+            puuid = summoner.get('puuid')
+            sid = summoner.get('summonerId')
+            own = (isinstance(puuid, str) and bool(puuid) and player.get('puuid') == puuid)
+            if not own:
+                own = type(sid) is int and sid > 0 and player.get('summonerId') == sid
+            champion_id = player.get('championId')
+            if not own or type(champion_id) is not int or champion_id not in champions():
+                continue
+            queue = data.get('queue') or {}
+            role = 'aram' if isinstance(queue, dict) and queue.get('gameMode') == 'ARAM' else ROLES.get(str(player.get('selectedPosition', '')).lower(), '')
+            return {'champion': champions()[champion_id], 'role': role,
+                    'role_label': ROLE_LABELS.get(role, 'Otomatik rol'), 'url': build_url(champion_id, role)}
+    return None
+
+
 def read_state(now=None):
     now = time.time() if now is None else now
     data = library.read_json(library.root() / 'guide.json', {})
@@ -95,12 +124,21 @@ class GuideTracker:
         self.last_write = 0
         self.signature = None
         self.missing_sessions = 0
+        self.last_connected = None
 
-    def update(self, phase, session=None, connected=True, prefs=None):
+    def update(self, phase, session=None, connected=True, prefs=None, recovered_pick=None):
         prefs = preferences.get() if prefs is None else prefs
         now = self.clock()
         actions = []
-        if not connected or phase not in {'ChampSelect', *GAME_PHASES, *END_PHASES}:
+        # Keep a known in-game pick through a brief client handoff. Never keep
+        # it indefinitely or across an explicit lobby/new champion selection.
+        if connected:
+            self.last_connected = now
+        elif self.phase in GAME_PHASES and self.last_connected is not None and now - self.last_connected < 60:
+            phase = self.phase
+            connected = False
+        retain_game = phase in GAME_PHASES and self.last_connected is not None and now - self.last_connected < 60
+        if (not connected and not retain_game) or phase not in {'ChampSelect', *GAME_PHASES, *END_PHASES}:
             if self.pick:
                 actions.append('hide')
             self.pick = None
@@ -127,8 +165,11 @@ class GuideTracker:
                 if key != self.shown_key:
                     self.shown_key = key
                     actions.append('show' if prefs['mobalytics_auto_show'] else 'prepare')
-        elif phase in GAME_PHASES and self.phase not in GAME_PHASES:
-            actions.append('hide')
+        elif phase in GAME_PHASES:
+            if recovered_pick:
+                self.pick = recovered_pick
+            if self.phase not in GAME_PHASES:
+                actions.append('hide')
         elif phase in END_PHASES and self.phase not in END_PHASES:
             actions.append('hide')
         if not prefs['mobalytics_enabled']:

@@ -28,7 +28,7 @@ class AutoAccept:
 
 def tick_helpers(lcu, accept, tracker, log, ban=None):
     """A failed optional guide must never prevent the independent ready check."""
-    from . import companion, preferences
+    from . import companion, preferences, guides
     try:
         lcu.refresh_if_needed()
         connected = lcu.ok
@@ -42,7 +42,12 @@ def tick_helpers(lcu, accept, tracker, log, ban=None):
         log.debug('OKDEV ready check unavailable: %s', type(exc).__name__)
     try:
         if ban is not None:
-            ban.tick(lcu, phase)
+            previous_status = ban.status
+            try:
+                ban.tick(lcu, phase)
+            finally:
+                if ban.status != previous_status:
+                    log.info('OKDEV auto ban: %s', ban.status)
     except Exception as exc:
         log.debug('OKDEV auto ban unavailable: %s', type(exc).__name__)
     try:
@@ -53,7 +58,13 @@ def tick_helpers(lcu, accept, tracker, log, ban=None):
                 session = lcu.session
             except Exception:
                 pass  # Tracker tolerates brief missing sessions, then clears stale picks.
-        data, actions = tracker.update(phase, session, connected=connected, prefs=prefs)
+        recovered = None
+        if phase in guides.GAME_PHASES and not tracker.pick and prefs['mobalytics_enabled']:
+            try:
+                recovered = guides.game_pick(lcu.game_session, lcu.current_summoner)
+            except Exception:
+                pass  # A failed recovery must not suppress the existing guide.
+        data, actions = tracker.update(phase, session, connected=connected, prefs=prefs, recovered_pick=recovered)
         if prefs['mobalytics_enabled'] and not companion.ensure_running():
             tracker.shown_key = None  # Retry a locked pick after startup cooldown.
         for action in actions:

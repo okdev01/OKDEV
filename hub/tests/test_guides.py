@@ -76,6 +76,40 @@ class GuideTests(LibraryFixture):
         self.update('Lobby')
         self.assertEqual(self.update(value=session())[1], ['show'])
 
+    def test_game_disconnect_keeps_pick_then_expires(self):
+        self.update(value=session())
+        self.update('InProgress')
+        self.now += 10
+        data, actions = self.update(None, connected=False)
+        self.assertEqual(data['pick']['champion']['id'], 11)
+        self.assertEqual(data['phase'], 'InProgress')
+        self.assertFalse(data['connected'])
+        self.assertEqual(actions, [])
+        self.now += 51
+        self.assertIsNone(self.update(None, connected=False)[0]['pick'])
+
+    def test_game_recovery_does_not_open_window_automatically(self):
+        pick = guides.locked_pick(session())
+        data, actions = self.tracker.update('InProgress', prefs=self.prefs, recovered_pick=pick)
+        self.assertEqual(data['pick'], pick)
+        self.assertEqual(actions, ['hide'])
+        self.assertIsNone(self.update('Lobby')[0]['pick'])
+
+    def test_game_pick_matches_local_player_only(self):
+        data = {'gameData': {'teamOne': [{'summonerId': 7, 'championId': 99}],
+                            'teamTwo': [{'summonerId': 8, 'championId': 11, 'selectedPosition': 'JUNGLE'}]}}
+        pick = guides.game_pick(data, {'summonerId': 8})
+        self.assertEqual(pick['champion']['id'], 11)
+        self.assertEqual(pick['role'], 'jungle')
+        self.assertIsNone(guides.game_pick(data, {}))
+        self.assertIsNone(guides.game_pick(data, {'summonerId': 9}))
+        data['gameData']['queue'] = {'gameMode': 'ARAM'}
+        self.assertEqual(guides.game_pick(data, {'summonerId': 8})['role'], 'aram')
+
+    def test_malformed_game_context_is_ignored(self):
+        for data in (None, {}, {'gameData': []}, {'gameData': {'teamOne': [None, {}], 'teamTwo': 'invalid'}}):
+            self.assertIsNone(guides.game_pick(data, {}))
+
     def test_disabling_prevents_opening_and_reenabling_can_show(self):
         self.prefs['mobalytics_enabled'] = False
         self.assertEqual(self.update(value=session())[1], ['disable'])

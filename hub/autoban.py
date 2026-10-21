@@ -6,6 +6,7 @@ class AutoBan:
     def __init__(self):
         self.game = None
         self.attempted = set()
+        self.status = 'idle'
 
     @staticmethod
     def read(lcu, path):
@@ -23,7 +24,7 @@ class AutoBan:
         actions = [a for group in session.get('actions', []) for a in group if isinstance(a, dict)]
         own = [a for a in actions if a.get('type') == 'ban' and a.get('actorCellId') == cell
                and a.get('isInProgress') is True and a.get('completed') is False
-               and a.get('championId') == 0 and type(a.get('id')) is int]
+               and a.get('championId') in (0, -1) and type(a.get('id')) is int]
         if len(own) != 1:
             return None
         protected = set()
@@ -41,12 +42,14 @@ class AutoBan:
 
     def tick(self, lcu, phase):
         if phase != 'ChampSelect':
+            self.status = 'waiting-for-champion-select'
             if phase:  # A transient disconnect must not permit a duplicate request.
                 self.game = None
                 self.attempted.clear()
             return False
         prefs = preferences.get()
         if not prefs['auto_ban_enabled'] or not prefs['auto_ban_priority']:
+            self.status = 'disabled-or-empty-priority'
             return False
         session = self.read(lcu, '/lol-champ-select/v1/session')
         game = session.get('gameId')
@@ -55,19 +58,25 @@ class AutoBan:
             self.attempted.clear()
         available = self.read(lcu, '/lol-champ-select/v1/bannable-champion-ids')
         if not isinstance(available, list) or any(type(c) is not int for c in available):
+            self.status = 'invalid-bannable-champions'
             return False
         first = self.candidate(session, prefs['auto_ban_priority'], set(available))
         if first is None or first[0] in self.attempted:
+            self.status = 'already-attempted' if first else ('no-bannable-champions' if not available else 'waiting-for-eligible-ban')
             return False
         # Respect late teammate hovers, manual selection and preference changes.
         session = self.read(lcu, '/lol-champ-select/v1/session')
         prefs = preferences.get()
         if not prefs['auto_ban_enabled'] or session.get('gameId') != game:
+            self.status = 'preferences-or-session-changed'
             return False
         choice = self.candidate(session, prefs['auto_ban_priority'], set(available))
         if choice is None or choice[0] != first[0]:
+            self.status = 'selection-changed'
             return False
         self.attempted.add(choice[0])  # Timeouts have an unknown result: never repeat.
+        self.status = 'request-outcome-unknown'
         response = lcu.s.patch(lcu.base + '/lol-champ-select/v1/session/actions/' + str(choice[0]),
                                json={'championId': choice[1], 'completed': True}, timeout=3)
+        self.status = 'ban-completed' if response.ok else 'request-rejected-' + str(response.status_code)
         return response.ok

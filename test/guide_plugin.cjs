@@ -38,5 +38,12 @@ nav.querySelectorAll('button')[0].click();assert.equal(scrolled.at(-1),'ARAM run
 guide.window.OKDEV_GUIDE_HOTKEY='Alt+B';guide.window.eval(read('hub/web/guide.js'));
 assert.equal(guide.window.document.querySelectorAll('#okdev-guide-navigation').length,1);
 assert.equal(nav.querySelector('.key').textContent,'Alt+B');
+guide.window.OKDEV_GUIDE_SECTION='items';guide.window.eval(read('hub/web/guide.js'));
+tick();assert.equal(scrolled.at(-1),'items');
+const before=scrolled.length;
+guide.window.dispatchEvent(new guide.window.Event('wheel'));
+tick();assert.equal(scrolled.length,before);
+guide.window.OKDEV_GUIDE_SECTION='runes';guide.window.eval(read('hub/web/guide.js'));
+tick();assert.equal(scrolled.at(-1),'ARAM runes');
 guide.window.close();
 console.log('Guide plugin and remote-page navigation passed: disabled/enabled states, champion display, manual show, gameplay hiding, disconnect, rune/item/ability section navigation.');

@@ -44,3 +44,14 @@ class HelperIsolationTests(LibraryFixture):
         helpers.tick_helpers(self.lcu, self.accept, self.tracker, self.log)
         self.assertFalse(self.tracker.update.call_args.kwargs['connected'])
         self.assertIsNone(self.tracker.update.call_args.args[0])
+
+    def test_midgame_start_recovers_champion_without_show_command(self):
+        preferences.update({'mobalytics_enabled': True})
+        self.lcu.phase = 'InProgress'
+        self.lcu.current_summoner = {'summonerId': 8}
+        self.lcu.game_session = {'gameData': {'teamOne': [{'summonerId': 8, 'championId': 11}]}}
+        tracker = guides.GuideTracker()
+        with patch.object(companion, 'ensure_running', return_value=True), patch.object(companion, 'command') as command:
+            helpers.tick_helpers(self.lcu, self.accept, tracker, self.log)
+        self.assertEqual(tracker.pick['champion']['id'], 11)
+        self.assertEqual([c.args[0] for c in command.call_args_list], ['hide'])
