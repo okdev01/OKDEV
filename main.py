@@ -16,6 +16,11 @@ if not getattr(sys, 'frozen', False):
         sys.path.insert(0, str(_project_root))
 
 # Keep packaged backend verification independent of all window/game startup.
+if __name__ == '__main__' and '--ltk-self-check' in sys.argv:
+    from okdev_ltk_update import self_check
+    offset = sys.argv.index('--ltk-self-check')
+    raise SystemExit(self_check(*sys.argv[offset+1:offset+4]))
+
 if __name__ == '__main__' and '--hub-self-check' in sys.argv:
     from hub.selfcheck import run
     report_path = sys.argv[sys.argv.index('--hub-self-check') + 1]

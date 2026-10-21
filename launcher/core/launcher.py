@@ -216,6 +216,18 @@ def _run_launcher_dialog(dev_mode: bool, test_download_fail: bool) -> None:
             try:
                 _perform_update(dialog, dev_mode=dev_mode)
 
+                if not dev_mode:
+                    from main import _get_tools_dir
+                    from injection.config.config_manager import ConfigManager
+                    from okdev_ltk_update import ensure_patcher
+                    from pathlib import Path
+                    game_path = ConfigManager().load_league_path()
+                    dialog.set_detail('LTK uyumluluğu kontrol ediliyor…')
+                    dialog.set_marquee(True)
+                    ensure_patcher(_get_tools_dir(), Path(game_path or '') / 'League of Legends.exe',
+                                   status=lambda text: (dialog.set_status(text), dialog.pump_messages()))
+                    dialog.set_marquee(False)
+
                 hash_sequence = HashCheckSequence()
                 hash_sequence.perform_hash_check(dialog, dev_mode=dev_mode)
                 

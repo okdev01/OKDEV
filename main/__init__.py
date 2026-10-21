@@ -648,10 +648,6 @@ def main() -> None:
     from okdev_install_paths import apply_install_paths
     apply_install_paths()
 
-    # Check for required DLL before anything else
-    if not _check_dll_present():
-        sys.exit(1)
-
     args = setup_arguments()
     if sys.platform == "win32":
         if not args.dev:
@@ -665,6 +661,10 @@ def main() -> None:
                 print(f"[Launcher] Unable to import launcher module: {err}")
             except Exception as err:  # noqa: BLE001
                 print(f"[Launcher] Launcher encountered an error: {err}")
+
+    # Updates and dependency repair must remain reachable when LTK is outdated.
+    if not _check_dll_present():
+        sys.exit(1)
 
     run_league_unlock(args=args)
 

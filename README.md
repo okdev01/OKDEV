@@ -2,6 +2,16 @@
 
 Windows için bağımsız sürümlenen OKDEV istemcisi.
 
+## 1.5.2: Otomatik LTK onarımı
+
+OKDEV sürüm kontrolü LTK denetiminden önce çalışır. LTK eksik, bozuk veya kurulu oyun derlemesi için eskiyse resmî LeagueToolkit GitHub sürümündeki değiştirilmemiş kurulum paketi doğrudan indirilir. Paket boyutu ve GitHub SHA-256 özeti doğrulanır; kurulum programı çalıştırılmadan yalnızca iki patcher dosyası çıkarılır. Yeni çiftin oyun derlemesini desteklediği doğrulanmadan mevcut dosyalara dokunulmaz. Güncel LTK için indirme yapılmaz. Açık maç veya çalışan patcher varken dosyalar değiştirilmez.
+
+Eski çift yerel `ltk-backup-*` klasöründe tutulur. Yazma hatasında çift geri yüklenir; güç kesilmesi sonrası yarım işlem sonraki açılışta kurtarılır. İndirme veya doğrulama başarısızsa mevcut dosyalar korunur. En yeni resmî LTK da oyunu desteklemiyorsa OKDEV uyumluluk sınırını aşmaya çalışmaz.
+
+**Eski sürümün “Patcher Outdated” ekranında kalan kullanıcılar:** League istemcisini, OKDEV’i (hata penceresi dahil) ve LTK Manager’ı kapatıp `OKDEV_LTK_Repair_1.5.2.exe` çalıştırın. OKDEV kurulum ve League `Game` klasörünü kontrol ederek onarımı başlatın. Araç LTK’yi resmî kaynaktan onarır ve gömülü, doğrulanmış OKDEV 1.5.2 paketini yedekli uygular. Sonraki güncellemeler uygulama içinden devam eder. Güncel sürümden eskiye geçiş yapmaz. Onarım aracı internet gerektirir ve hiçbir uygulamayı zorla kapatmaz.
+
+LTK dosyaları OKDEV dağıtımına dahil değildir; kullanıcı bilgisayarına doğrudan resmî kaynaktan alınır. Arşiv çıkarma için kullanılan değiştirilmemiş 7-Zip 26.04 dosyalarının lisansı ve kaynak kod bağlantısı `assets/7zip/` içindedir.
+
 ## 1.5.1: 26.20 kostümleri ve seçim düzeltmeleri
 
 26.20 ile gelen yedi kostüm ve 38 renk varyantı eksik kütüphane kayıtlarını tamamlar. Başlangıç senkronizasyonundan sonra paketlerin SHA-256 değerleri doğrulanır; yalnızca eksik dosyalar eklenir. Kaynak depodan gelen mevcut paketler ve isimler korunur. Türkçe/İngilizce isim kayıtları dahildir.
