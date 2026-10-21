@@ -25,6 +25,13 @@ def perform_cleanup(state: SharedState, thread_manager: ThreadManager, tray_mana
     log_section(log, "Cleanup", "")
     from hub.desktop import close_hub
     close_hub()
+    # The assistant worker is a daemon and can exit before its final quit command.
+    # Shut down its separate WebView process from the main cleanup path as well.
+    try:
+        from hub import companion
+        companion.command('quit')
+    except Exception:
+        log.warning('Failed to close guide companion during cleanup', exc_info=True)
 
     # A suspension outlives OKDEV: resume first, or closing during mkoverlay freezes the game for good
     if injection_manager:

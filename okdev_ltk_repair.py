@@ -8,7 +8,7 @@ import sys
 import tempfile
 import threading
 
-VERSION = '1.5.4'
+VERSION = '1.5.5'
 RESOURCES = Path(getattr(sys, '_MEIPASS', Path(__file__).parent/'release'))
 
 
@@ -23,7 +23,7 @@ def repair(install, game, status):
     metadata = json.loads((install/'okdev-install.json').read_text(encoding='utf-8'))
     if not metadata.get('install_id') or not (install/'OKDEV.exe').is_file():
         raise ValueError('Geçerli OKDEV kurulum klasörünü seçin.')
-    if tuple(map(int, metadata['version'].split('.'))) > (1, 5, 4):
+    if tuple(map(int, metadata['version'].split('.'))) > (1, 5, 5):
         raise ValueError('Kurulu OKDEV daha yeni; eski sürüme geçilmedi.')
     # Old elevated processes may hide their paths. Never proceed around them.
     for process in psutil.process_iter(['name', 'exe']):
@@ -49,7 +49,7 @@ def repair(install, game, status):
             wait_for_install_exit(install, timeout=0)
             ensure_patcher(install/'_internal/injection/tools', game/'League of Legends.exe', status)
             wait_for_install_exit(install, timeout=0)
-            status('OKDEV 1.5.4 kuruluyor; mevcut kurulum yedekleniyor…')
+            status('OKDEV 1.5.5 kuruluyor; mevcut kurulum yedekleniyor…')
             backup = apply_update(install, payload)
     return backup
 
@@ -58,7 +58,7 @@ def main():
     import tkinter as tk
     from tkinter import filedialog, messagebox
     root = tk.Tk()
-    root.title('OKDEV 1.5.4 — LTK ve güncelleme onarımı')
+    root.title('OKDEV 1.5.5 — LTK ve güncelleme onarımı')
     root.geometry('690x330')
     install = tk.StringVar(value=str(Path(os.environ.get('LOCALAPPDATA', ''))/'Programs/OKDEV'))
     game = tk.StringVar(value='C:/Riot Games/League of Legends/Game')
@@ -104,7 +104,7 @@ def main():
                 messages.put(('error', str(exc)))
         threading.Thread(target=work, daemon=True).start()
 
-    controls.append(tk.Button(root, text='LTK’yi onar ve OKDEV 1.5.4’ye güncelle', command=start))
+    controls.append(tk.Button(root, text='LTK’yi onar ve OKDEV 1.5.5’ye güncelle', command=start))
     controls[-1].pack(pady=5)
 
     def poll():

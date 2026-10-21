@@ -54,6 +54,10 @@ class UpdateSequence:
         if updater_running():
             status('Bir OKDEV güncellemesi zaten çalışıyor.')
             return False
+        from .update_installer import other_main_running
+        if other_main_running(Path(sys.executable).resolve().parent):
+            status('OKDEV zaten çalışıyor; ikinci açılış güncelleme başlatmadı.')
+            return False
         root = get_config_file_path().parent/'updates'/remote.lstrip('v')
         root.mkdir(parents=True, exist_ok=True)
         archive = root/asset['name']

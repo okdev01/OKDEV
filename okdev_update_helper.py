@@ -5,6 +5,52 @@ import shutil
 import uuid
 
 
+def claim_update_lock(path):
+    """Keep one helper alive per update directory, including legacy callers."""
+    import os
+    stream = Path(path).open('a+b')
+    try:
+        if stream.tell() == 0:
+            stream.write(b'0')
+            stream.flush()
+        stream.seek(0)
+        if os.name == 'nt':
+            import msvcrt
+            msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return stream
+    except OSError:
+        stream.close()
+        return None
+
+
+def request_auxiliary_exit(install):
+    """Cooperatively close only this installation's UI after its main app exited."""
+    import psutil
+    install = Path(install).resolve()
+    auxiliaries = []
+    for process in psutil.process_iter(['name', 'exe', 'cmdline']):
+        exe = process.info.get('exe')
+        if not exe or Path(exe).resolve() != install/'OKDEV.exe':
+            continue
+        arguments = process.info.get('cmdline') or []
+        if '--guide-companion' in arguments:
+            auxiliaries.append(('guide', process.pid))
+        elif '--hub' in arguments:
+            auxiliaries.append(('hub', process.pid))
+        else:
+            return  # Another main app is still using this installation.
+    for kind, pid in auxiliaries:
+        if kind == 'guide':
+            from hub.companion import command
+            command('quit')
+        else:
+            from hub.lifecycle import request_shutdown
+            request_shutdown(pid)
+
+
 def wait_for_install_exit(install, timeout=30):
     """Allow launcher/child shutdown to settle before replacing its files."""
     import psutil
@@ -92,6 +138,9 @@ def main():
     updates_root = args.log_file.parent
     if re.fullmatch(r'\d+\.\d+\.\d+', updates_root.name):
         updates_root = updates_root.parent
+    update_lock = claim_update_lock(updates_root/'update-apply.lock')
+    if update_lock is None:
+        return  # Another helper owns the transaction; do not reopen another app.
     client = None
     error = None
     committed = False
@@ -107,6 +156,7 @@ def main():
             from okdev_client_update import ClientPause
             client = ClientPause(updates_root/'client-ux-resume.json')
             client.pause()
+        request_auxiliary_exit(args.install_dir)
         wait_for_install_exit(args.install_dir)
         if client is not None:
             client.require_safe()
@@ -136,11 +186,14 @@ def main():
                 error = str(exc)
                 with args.log_file.open('a', encoding='utf-8') as stream:
                     stream.write('\nLeague arayüzü kurtarma bekliyor: '+str(exc))
-        if (args.install_dir/'OKDEV.exe').is_file():
+        # Reopening a failed old version immediately starts the same update again.
+        # A failed transaction leaves the installation intact and stops here.
+        if committed and (args.install_dir/'OKDEV.exe').is_file():
             subprocess.Popen([str(args.install_dir/'OKDEV.exe')], cwd=args.install_dir)
         if error:
             import ctypes
             ctypes.windll.user32.MessageBoxW(None, error, 'OKDEV güncelleme tamamlanamadı', 0x10)
+        update_lock.close()
 
 
 if __name__ == '__main__':

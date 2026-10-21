@@ -16,7 +16,7 @@ from pathlib import Path, PurePosixPath
 
 from patcher_check import read_dll_eol, read_game_build
 
-VERSION = '1.5.4'
+VERSION = '1.5.5'
 RESOURCES = Path(getattr(sys, '_MEIPASS', Path(__file__).parent))
 PATCHER_NAMES = ('ltk_patcher_host.exe', 'ltk_patcher_dll.dll')
 

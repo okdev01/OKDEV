@@ -23,7 +23,7 @@ class HelperClientTests(unittest.TestCase):
                 return root/'backup'
             argv=['updater','--pid','123','--install-dir',str(install),'--staging-dir',str(root/'staging'),
                   '--log-file',str(updates/'updater.log'),'--restart-client-ux']
-            with patch('sys.argv',argv),patch('psutil.Process'),patch('os.chdir'),patch.object(helper,'wait_for_install_exit'),patch.object(helper,'apply_update',side_effect=apply),patch('okdev_client_update.ClientPause',return_value=guard),patch('okdev_client_update.sync_runtime',side_effect=lambda _:events.append('runtime')),patch('okdev_branding.refresh_shortcut'),patch('subprocess.Popen',side_effect=lambda *a,**k:events.append('app')),patch('ctypes.windll.user32.MessageBoxW'):
+            with patch('sys.argv',argv),patch('psutil.Process'),patch('os.chdir'),patch.object(helper,'request_auxiliary_exit'),patch.object(helper,'wait_for_install_exit'),patch.object(helper,'apply_update',side_effect=apply),patch('okdev_client_update.ClientPause',return_value=guard),patch('okdev_client_update.sync_runtime',side_effect=lambda _:events.append('runtime')),patch('okdev_branding.refresh_shortcut'),patch('subprocess.Popen',side_effect=lambda *a,**k:events.append('app')),patch('ctypes.windll.user32.MessageBoxW'):
                 helper.main()
             text=(updates/'updater.log').read_text(encoding='utf-8')
             return events,text
@@ -33,9 +33,9 @@ class HelperClientTests(unittest.TestCase):
         self.assertEqual(events,['pause','recheck','apply','runtime','resume','app'])
         self.assertIn('Update installed.',text)
 
-    def test_failed_update_restores_ux_and_reopens_original_app(self):
+    def test_failed_update_restores_ux_without_restarting_update_loop(self):
         events,text=self.run_helper(fail=True)
-        self.assertEqual(events,['pause','recheck','apply','resume','app'])
+        self.assertEqual(events,['pause','recheck','apply','resume'])
         self.assertIn('previous installation retained',text)
 
 

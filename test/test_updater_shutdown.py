@@ -3,11 +3,50 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 from okdev_update_helper import wait_for_install_exit
-from launcher.update.update_installer import UpdateInstaller
+from okdev_update_helper import request_auxiliary_exit, claim_update_lock
+from launcher.update.update_installer import UpdateInstaller, other_main_running
 import tempfile
 
 
 class ShutdownTests(unittest.TestCase):
+    def test_duplicate_main_is_detected_but_own_ui_children_are_not(self):
+        root = Path('installation').resolve()
+        def process(pid, arguments):
+            return SimpleNamespace(pid=pid,info={'exe':str(root/'OKDEV.exe'),'cmdline':['OKDEV.exe',*arguments]})
+        with patch('os.getpid',return_value=1),patch('psutil.process_iter',return_value=[process(1,[]),process(2,['--hub']),process(3,['--guide-companion'])]):
+            self.assertFalse(other_main_running(root))
+        with patch('os.getpid',return_value=1),patch('psutil.process_iter',return_value=[process(2,[])]):
+            self.assertTrue(other_main_running(root))
+    def test_only_one_helper_can_own_update_directory(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder)/'apply.lock'
+            first = claim_update_lock(path)
+            self.assertIsNotNone(first)
+            try:
+                self.assertIsNone(claim_update_lock(path))
+            finally:
+                first.close()
+            second = claim_update_lock(path)
+            self.assertIsNotNone(second)
+            second.close()
+
+    def test_auxiliary_exit_is_cooperative_and_scoped_to_install(self):
+        root = Path('installation').resolve()
+        guide = SimpleNamespace(pid=11, info={'exe':str(root/'OKDEV.exe'), 'cmdline':['OKDEV.exe','--guide-companion']})
+        hub = SimpleNamespace(pid=12, info={'exe':str(root/'OKDEV.exe'), 'cmdline':['OKDEV.exe','--hub']})
+        unrelated = SimpleNamespace(pid=13, info={'exe':str(root.parent/'other/OKDEV.exe'), 'cmdline':['OKDEV.exe','--hub']})
+        with patch('psutil.process_iter',return_value=[guide,hub,unrelated]),patch('hub.companion.command') as quit_guide,patch('hub.lifecycle.request_shutdown') as quit_hub:
+            request_auxiliary_exit(root)
+            quit_guide.assert_called_once_with('quit')
+            quit_hub.assert_called_once_with(12)
+
+    def test_other_main_app_prevents_auxiliary_exit(self):
+        root = Path('installation').resolve()
+        processes = [SimpleNamespace(pid=11, info={'exe':str(root/'OKDEV.exe'), 'cmdline':['OKDEV.exe','--guide-companion']}),
+                     SimpleNamespace(pid=12, info={'exe':str(root/'OKDEV.exe'), 'cmdline':['OKDEV.exe']})]
+        with patch('psutil.process_iter',return_value=processes),patch('hub.companion.command') as quit_guide:
+            request_auxiliary_exit(root)
+            quit_guide.assert_not_called()
     def test_verified_package_helper_replaces_old_helper(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

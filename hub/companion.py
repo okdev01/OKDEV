@@ -177,6 +177,8 @@ def run():
         return
     machine = WindowState()
     stopping = threading.Event()
+    import psutil
+    owner = psutil.Process().parent()
     window = webview.create_window('OKDEV · Oyun rehberi', html='<html><body style="background:#11131c;color:#ddd;font:16px Segoe UI;padding:32px">Rehber hazırlanıyor…</body></html>',
         width=470, height=720, min_size=(380, 500), hidden=True, focus=False, on_top=True,
         background_color='#11131c', text_select=True)
@@ -233,6 +235,8 @@ def run():
                 raise RuntimeError('Rehber penceresi başlatılamadı.')
             hwnd = int(window.native.Handle.ToInt64())
             while not stopping.wait(.2):
+                if owner is not None and not owner.is_running():
+                    break  # Do not keep an orphan WebView locking the installation.
                 prefs = preferences.get()
                 if not prefs['mobalytics_enabled']:
                     break

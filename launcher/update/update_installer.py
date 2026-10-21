@@ -8,6 +8,21 @@ import subprocess
 import zipfile
 
 
+def other_main_running(install_dir):
+    """Reject duplicate launches before they download/extract a shared payload."""
+    import psutil
+    executable = Path(install_dir).resolve()/'OKDEV.exe'
+    for process in psutil.process_iter(['name', 'exe', 'cmdline']):
+        if process.pid == os.getpid():
+            continue
+        exe = process.info.get('exe')
+        if exe and Path(exe).resolve() == executable:
+            args = process.info.get('cmdline') or []
+            if '--hub' not in args and '--guide-companion' not in args:
+                return True
+    return False
+
+
 class UpdateInstaller:
     def extract_update(self, zip_path, staging_dir, progress_callback, status_callback):
         try:
