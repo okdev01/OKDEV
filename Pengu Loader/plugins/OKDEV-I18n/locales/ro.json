@@ -185,5 +185,15 @@
   "Administrator privileges are required to enable auto-start.": "Sunt necesare drepturi de administrator pentru a activa pornirea automată.",
   "Administrator privileges are required to disable auto-start.": "Sunt necesare drepturi de administrator pentru a dezactiva pornirea automată.",
   "Failed to enable auto-start: {error}": "Pornirea automată nu a putut fi activată: {error}",
-  "Failed to disable auto-start: {error}": "Pornirea automată nu a putut fi dezactivată: {error}"
+  "Failed to disable auto-start: {error}": "Pornirea automată nu a putut fi dezactivată: {error}",
+  "Connection lost. Reopen OKDEV and try again.": "Conexiunea s-a întrerupt. Redeschide OKDEV și încearcă din nou.",
+  "No response received. Check the connection before saving again.": "Nu s-a primit niciun răspuns. Verifică conexiunea înainte de a salva din nou.",
+  "Mod imported: {name}": "Mod importat: {name}",
+  "Reload list": "Reîncarcă lista",
+  "Operation failed": "Operațiunea a eșuat",
+  "No response received. Reload the list to check the result.": "Nu s-a primit niciun răspuns. Reîncarcă lista pentru a verifica rezultatul.",
+  "Game path is valid": "Calea jocului este validă",
+  "Game path is invalid": "Calea jocului nu este validă",
+  "Validating game path…": "Se verifică calea jocului…",
+  "Support": "Asistență"
 }

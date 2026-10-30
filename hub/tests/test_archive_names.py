@@ -34,8 +34,8 @@ class ArchiveNameTests(LibraryFixture):
                     library.validate_archive(self.make_entries(names))
 
     def test_unicode_percent_and_shared_directory_entries_remain_valid(self):
-        package = self.make_entries(['WAD/', 'wad/', 'WAD/测试-Çağrı%100.bin',
-                                     'WAD/nested/', 'WAD/nested/Игрок.bin'])
+        package = self.make_entries(['WAD/', 'wad/', 'WAD/测试-Çağrı%100.wad.client',
+                                     'WAD/nested.wad.client/', 'WAD/nested.wad.client/Игрок.bin'])
         library.validate_archive(package)
 
 

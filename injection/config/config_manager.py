@@ -17,23 +17,23 @@ log = get_logger()
 
 class ConfigManager:
     """Manages League path configuration"""
-    
+
     def __init__(self):
         self._config_path = None
-    
+
     def _get_config_path(self) -> Path:
         """Get the path to the config.ini file"""
         if self._config_path is None:
             self._config_path = get_config_file_path()
         return self._config_path
-    
+
     def load_league_path(self) -> Optional[str]:
         """Load league path (League of Legends.exe directory) from config.ini file"""
         config_path = self._get_config_path()
         if not config_path.exists():
             log.debug("Config file not found, will create one")
             return None
-        
+
         try:
             config = configparser.ConfigParser(interpolation=None)
             read_config_file(config, config_path)
@@ -43,15 +43,15 @@ class ConfigManager:
                 return league_path
         except Exception as e:
             log.warning(f"Failed to read config file: {e}")
-        
+
         return None
-    
+
     def load_client_path(self) -> Optional[str]:
         """Load client path (LeagueClient.exe directory) from config.ini file"""
         config_path = self._get_config_path()
         if not config_path.exists():
             return None
-        
+
         try:
             config = configparser.ConfigParser(interpolation=None)
             read_config_file(config, config_path)
@@ -61,9 +61,9 @@ class ConfigManager:
                 return client_path
         except Exception as e:
             log.warning(f"Failed to read config file: {e}")
-        
+
         return None
-    
+
     def _save_values(self, values: dict[str, str]) -> None:
         try:
             with edit_config_file(self._get_config_path()) as settings:
@@ -91,7 +91,7 @@ class ConfigManager:
         Returns None if inference is not possible."""
         if not league_path or not league_path.strip():
             return None
-        
+
         try:
             league_dir = Path(league_path.strip())
             # If league path ends with "Game", client is the parent
@@ -100,7 +100,7 @@ class ConfigManager:
                 client_exe = client_dir / "LeagueClient.exe"
                 if client_exe.exists():
                     return str(client_dir)
-            
+
             # Try parent directory structure
             parent_dir = league_dir.parent
             # WeGame keeps Game and LeagueClient in sibling directories.
@@ -110,7 +110,7 @@ class ConfigManager:
             client_exe = parent_dir / "LeagueClient.exe"
             if client_exe.exists():
                 return str(parent_dir)
-            
+
             return None
         except Exception:
             return None

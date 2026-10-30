@@ -28,6 +28,7 @@ def main():
     parser.add_argument('--zoom-check', action='store_true')
     parser.add_argument('--report', type=Path, default=ROOT / 'build/hub-webview-check.json')
     parser.add_argument('--accessibility', action='store_true')
+    parser.add_argument('--polish', action='store_true')
     parser.add_argument('--keep-open', action='store_true')
     parser.add_argument('--soak-seconds', type=int, default=0)
     parser.add_argument('--soak-report', type=Path)
@@ -119,8 +120,9 @@ def main():
                 assert library.installed()['fixture']['enabled']
                 results['checks'].append('enable persisted through Python bridge')
                 click('[data-page="profiles"]')
+                click('#newProfile')
                 evaluate("document.getElementById('profileName').value='QA Profile'")
-                click('.profile-row button')
+                click('.profile-row button[type="submit"]')
                 check('profile saved', "document.querySelectorAll('#profileCards .profile-card').length === 1")
                 click('[data-page="installed"]')
                 click('#installedGrid .actions button')
@@ -165,7 +167,10 @@ def main():
                 click('#resetForm')
                 evaluate("document.getElementById('championName').value='Ahri'; document.getElementById('championName').dispatchEvent(new Event('input'))")
                 check('champion ID autocomplete', "document.getElementById('championId').value === '103'")
-                api._selected = package
+                # Exercise the real file-selection bridge. Only the OS picker
+                # response is replaced, so UI readiness and metadata are real.
+                with patch.object(window, 'create_file_dialog', return_value=[str(package)]):
+                    click('#choose')
                 evaluate("const f=document.getElementById('modForm');f.elements.namedItem('id').value='fixture';f.elements.namedItem('name').value='QA Ahri updated';f.elements.namedItem('version').value='2.0.0';f.dispatchEvent(new Event('submit',{cancelable:true}))")
                 wait_for("document.getElementById('importReplaceDialog').open")
                 check('replacement preview compares versions', "document.getElementById('importReplaceDialog').textContent.includes('v1.0.0 → QA Ahri updated · v2.0.0')")
@@ -190,7 +195,7 @@ def main():
                 click('[data-page="assistants"]')
                 evaluate("document.getElementById('theme').value='light';document.getElementById('theme').dispatchEvent(new Event('change'))")
                 wait_for("document.documentElement.dataset.theme === 'light'")
-                check('light theme applied', "getComputedStyle(document.body).color === 'rgb(36, 33, 45)'")
+                check('light theme applied', "getComputedStyle(document.body).color === 'rgb(27, 41, 62)'")
                 evaluate("document.getElementById('theme').value='dark';document.getElementById('theme').dispatchEvent(new Event('change'))")
                 wait_for("document.documentElement.dataset.theme === 'dark'")
                 click('[data-page="library"]')
@@ -214,6 +219,19 @@ def main():
                 check('background completion preserves native checkbox focus', "document.activeElement.type === 'checkbox' && document.activeElement.closest('.card').dataset.modId === window.__focusedMod")
                 assert 'rf-dark-mode-hud' in library.installed()
                 results['checks'].append('background queue installs and refreshes real library')
+                click('#searchShortcut')
+                check('2.0 command palette owns keyboard focus', "document.getElementById('commandDialog').open && document.activeElement.id === 'commandSearch'")
+                evaluate("document.getElementById('commandSearch').value='QA Ahri';document.getElementById('commandSearch').dispatchEvent(new Event('input'))")
+                check('2.0 local command search finds installed mod', "document.querySelectorAll('#commandResults [role=option]').length === 1")
+                if options.capture:
+                    capture('command-search')
+                evaluate("document.getElementById('commandSearch').dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}))")
+                check('2.0 command opens actual mod details', "!document.getElementById('commandDialog').open && document.getElementById('detailDialog').open && document.getElementById('detailContent').textContent.includes('QA Ahri updated')")
+                click('#closeDetail')
+                check('2.0 data saver prevents remote cover loads', "document.querySelectorAll('img[src^=\"https:\"]').length === 0")
+                library.enable('fixture', True)
+                wait_for("document.getElementById('loadoutSummary').textContent.includes('1 etkin mod')")
+                results['checks'].append('2.0 external selection refreshes through native bridge')
                 for section in ('home', 'library', 'installed', 'profiles', 'guides', 'assistants', 'diagnostics', 'downloads'):
                     click(f'[data-page="{section}"]')
                     check(section + ': no horizontal overflow', 'document.documentElement.scrollWidth <= window.innerWidth')
@@ -273,6 +291,10 @@ def main():
                                 for node in item['nodes']), 'Unreviewed accessibility finding: ' + str(item)
                     check('18 accessibility page/theme audits', str(violations == 0).lower())
                 check('no JavaScript errors', 'window.__qaErrors.length === 0')
+                if options.polish:
+                    from hub_polish_qa import run as polish
+                    polish(window, evaluate, wait_for, capture, api, ROOT)
+                    results['checks'].append('Native mouse and keyboard polish checks completed')
                 if options.soak_seconds:
                     from hub_soak import run as soak
                     soak(window, evaluate, click, wait_for, ROOT, options.soak_seconds, output=options.soak_report)

@@ -60,7 +60,7 @@ def collect():
     pending = transaction_status()['pending']
     add('Yarım kalan işlemler', 'ok' if pending == 0 else 'warning',
         'Tamamlanmayı bekleyen mod işlemi yok.' if pending == 0 else 'Yarım kalmış işlem kayıtları bulundu. Kurtarmayı dene; dosyaların üzerine yazılmaz.')
-    missing = [m['name'] for m in items.values() if not library.mod_folder(m).is_dir()]
+    missing = [m['name'] for m in items.values() if not library.mod_available(m)]
     add('Yüklü mod dosyaları', 'warning' if missing else 'ok',
         'Yeniden içe aktarılması gerekenler: ' + ', '.join(missing) if missing else f'{len(items)} kayıt kontrol edildi.')
     try:

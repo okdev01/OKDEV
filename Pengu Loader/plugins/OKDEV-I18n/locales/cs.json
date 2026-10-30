@@ -185,5 +185,15 @@
   "Administrator privileges are required to enable auto-start.": "K zapnutí automatického spouštění jsou potřeba práva správce.",
   "Administrator privileges are required to disable auto-start.": "K vypnutí automatického spouštění jsou potřeba práva správce.",
   "Failed to enable auto-start: {error}": "Automatické spouštění se nepodařilo zapnout: {error}",
-  "Failed to disable auto-start: {error}": "Automatické spouštění se nepodařilo vypnout: {error}"
+  "Failed to disable auto-start: {error}": "Automatické spouštění se nepodařilo vypnout: {error}",
+  "Connection lost. Reopen OKDEV and try again.": "Připojení bylo přerušeno. Znovu otevři OKDEV a zkus to znovu.",
+  "No response received. Check the connection before saving again.": "Nebyla přijata odpověď. Před dalším uložením zkontroluj připojení.",
+  "Mod imported: {name}": "Mod importován: {name}",
+  "Reload list": "Znovu načíst seznam",
+  "Operation failed": "Operace se nezdařila",
+  "No response received. Reload the list to check the result.": "Nebyla přijata odpověď. Znovu načti seznam a zkontroluj výsledek.",
+  "Game path is valid": "Cesta ke hře je platná",
+  "Game path is invalid": "Cesta ke hře je neplatná",
+  "Validating game path…": "Ověřování cesty ke hře…",
+  "Support": "Podpora"
 }

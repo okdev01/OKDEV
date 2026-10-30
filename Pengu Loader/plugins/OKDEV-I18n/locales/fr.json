@@ -185,5 +185,15 @@
   "Administrator privileges are required to enable auto-start.": "Les droits administrateur sont nécessaires pour activer le lancement au démarrage.",
   "Administrator privileges are required to disable auto-start.": "Les droits administrateur sont nécessaires pour désactiver le lancement au démarrage.",
   "Failed to enable auto-start: {error}": "Impossible d'activer le lancement au démarrage : {error}",
-  "Failed to disable auto-start: {error}": "Impossible de désactiver le lancement au démarrage : {error}"
+  "Failed to disable auto-start: {error}": "Impossible de désactiver le lancement au démarrage : {error}",
+  "Connection lost. Reopen OKDEV and try again.": "Connexion perdue. Rouvrez OKDEV et réessayez.",
+  "No response received. Check the connection before saving again.": "Aucune réponse reçue. Vérifiez la connexion avant de réenregistrer.",
+  "Mod imported: {name}": "Mod importé : {name}",
+  "Reload list": "Actualiser la liste",
+  "Operation failed": "Échec de l’opération",
+  "No response received. Reload the list to check the result.": "Aucune réponse reçue. Actualisez la liste pour vérifier le résultat.",
+  "Game path is valid": "Le chemin du jeu est valide",
+  "Game path is invalid": "Le chemin du jeu est invalide",
+  "Validating game path…": "Vérification du chemin du jeu…",
+  "Support": "Assistance"
 }

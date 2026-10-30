@@ -17,7 +17,8 @@ class PortableProfileTests(LibraryFixture):
         self.assertEqual(document['mods'][0]['id'], 'sample')
         self.assertNotIn('relative_path', json.dumps(document))
         self.assertNotIn(str(self.root), json.dumps(document))
-        self.assertEqual(set(document['mods'][0]), {'id', 'name', 'version'})
+        self.assertEqual(set(document['mods'][0]), {'id', 'name', 'version', 'package_sha256', 'category', 'champion_id', 'target_skin_id'})
+        self.assertEqual(document['schema'], 2)
 
     def test_import_missing_references_does_not_change_selections(self):
         library.import_archive(self.archive(), self.item('other'))
@@ -56,7 +57,7 @@ class PortableProfileTests(LibraryFixture):
         self.assertEqual(profiles.list_profiles(), {})
 
     def test_unknown_schema_and_boolean_schema_are_rejected(self):
-        for schema in (True, '1', 2, None):
+        for schema in (True, '1', 3, None):
             document = self.document()
             document['schema'] = schema
             with self.assertRaises(ValueError):
@@ -66,4 +67,4 @@ class PortableProfileTests(LibraryFixture):
         document = self.document()
         document['mods'] = []
         result = profiles.import_profile(document)
-        self.assertEqual(profiles.export_profile(result['id']), document)
+        self.assertEqual(profiles.export_profile(result['id']), dict(document, schema=2))

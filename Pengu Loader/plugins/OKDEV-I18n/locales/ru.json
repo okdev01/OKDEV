@@ -185,5 +185,15 @@
   "Administrator privileges are required to enable auto-start.": "Для включения автозапуска нужны права администратора.",
   "Administrator privileges are required to disable auto-start.": "Для отключения автозапуска нужны права администратора.",
   "Failed to enable auto-start: {error}": "Не удалось включить автозапуск: {error}",
-  "Failed to disable auto-start: {error}": "Не удалось отключить автозапуск: {error}"
+  "Failed to disable auto-start: {error}": "Не удалось отключить автозапуск: {error}",
+  "Connection lost. Reopen OKDEV and try again.": "Соединение потеряно. Откройте OKDEV заново и повторите попытку.",
+  "No response received. Check the connection before saving again.": "Ответ не получен. Проверьте соединение перед повторным сохранением.",
+  "Mod imported: {name}": "Мод импортирован: {name}",
+  "Reload list": "Обновить список",
+  "Operation failed": "Операция не выполнена",
+  "No response received. Reload the list to check the result.": "Ответ не получен. Обновите список, чтобы проверить результат.",
+  "Game path is valid": "Путь к игре указан верно",
+  "Game path is invalid": "Путь к игре указан неверно",
+  "Validating game path…": "Проверка пути к игре…",
+  "Support": "Поддержка"
 }

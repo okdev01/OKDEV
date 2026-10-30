@@ -166,6 +166,7 @@ class ResilienceTests(LibraryFixture):
         self.assertFalse(library.installed()['sample']['enabled'])
         self.assertIsNone(library.active_mod(103))
         external = {'relative_path': 'others/external', 'mod_name': 'External'}
+        (self.root / 'mods/others/external').mkdir(parents=True)
         state = SimpleNamespace(selected_other_mods=[external, {'relative_path': first['relative_path']}])
         apply_category_selections(state)
         self.assertEqual(len(state.selected_other_mods), 2)

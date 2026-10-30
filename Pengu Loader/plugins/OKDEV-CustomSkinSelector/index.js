@@ -847,7 +847,16 @@
     ));
     modsForKey = `${championId}:${skinId}`;
 
-    if (selectedModId && !pendingSelectionRequest) {
+    if (detail.selectionAuthoritative && !pendingSelectionRequest) {
+      const selection = detail.selection;
+      const compatible = [skinId, ...(detail.compatibleSkinIds || []).map(Number)];
+      const match = selection && compatible.includes(Number(selection.skinId)) &&
+        modsForCurrentSkin.find(m => m.relativePath === selection.relativePath);
+      selectedModId = match ? normalizeModId(match) : null;
+      selectedModSkinId = match ? Number(selection.skinId) : null;
+    }
+
+    if (!detail.selectionAuthoritative && selectedModId && !pendingSelectionRequest) {
       const selectedEntry = modsForCurrentSkin.find((mod) => (
         String(mod?.relativePath || mod?.modName || "") === String(selectedModId)
       ));
@@ -856,7 +865,7 @@
       }
     }
 
-    if (!selectedModId && !pendingSelectionRequest && detail.historicMod) {
+    if (!detail.selectionAuthoritative && !selectedModId && !pendingSelectionRequest && detail.historicMod) {
       const match = modsForCurrentSkin.find(m => String(m?.relativePath || "").replace(/\\/g, "/") === String(detail.historicMod).replace(/\\/g, "/"));
       if (match) { sendSelect(normalizeModId(match), match); }
     }

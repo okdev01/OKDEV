@@ -22,7 +22,7 @@ def signal_handler(signum, frame):
     if app_state.shutting_down:
         return  # Prevent multiple shutdown attempts
     app_state.shutting_down = True
-    
+
     print(f"\nReceived signal {signum}, initiating graceful shutdown...")
     try:
         pengu_loader.deactivate_on_exit()
@@ -41,7 +41,7 @@ def force_quit_handler():
     if app_state.shutting_down:
         return
     app_state.shutting_down = True
-    
+
     print("\nForce quit initiated...")
     try:
         pengu_loader.deactivate_on_exit()

@@ -2,6 +2,44 @@
 
 Windows için bağımsız sürümlenen OKDEV istemcisi.
 
+## 2.0.0: Oyun alanı, ortak seçimler ve çevrimdışı kullanım
+
+Oyun odaklı koyu tasarım, yerel vektör amblem ve yenilenen kartlarla Mod Merkezi yeniden düzenlendi. Ana ekrandaki seçim özeti etkin modları ve eksik dosyaları gösterir. **Ctrl+K** ile yüklü modlarda ve uygulama sayfalarında Türkçe karakterlerle arama yapılır; ok tuşları ve Enter ile gezinilir. Açık tema, kompakt kartlar ve hareketi azaltma seçenekleri korunur.
+
+Kart ve liste görünümü tercihi sonraki açılışta korunur. Etkin arama ve kategori filtreleri ayrı ayrı kaldırılabilir; toplu işlem çubuğu yalnızca mod seçildiğinde görünür. Ayarlar, **Görünüm ve kullanım**, **Oyun yardımcıları** ve **Hakkında** sekmelerine ayrılır; ok tuşları, Home ve End ile sekmeler arasında geçilir. Yeni profil ayrı bir pencerede oluşturulur; hata mesajları ilgili pencerenin içinde gösterilir.
+
+Sistem teması uygulama açıkken değişebilir; elle seçilen tema korunur. Windows'un hareket azaltma tercihi uygulanır. Yüksek karşıtlık görünümünde anahtarların açık/kapalı durumu ve seçili menüler sistem renkleriyle gösterilir. Boşluksuz uzun mod adları sistem durumu kartlarında satıra bölünür.
+
+Oyun içi ayarlar panelinde kaydetme yanıtı beklenirken ikinci istek engellenir; başarısız kayıt görünür biçimde bildirilir ve yazılan yeni değerler korunur. Kostüm ve renk seçimi Tab, Enter ve Space ile kullanılabilir. Geç gelen başka bir şampiyonun yanıtı açık seçimi değiştirmez. Dar ekran ve yakınlaştırmada seçim pencereleri kaydırılabilir; onay düğmesi erişilebilir kalır. Kurulum ekranı ve açılış ilerlemesi de yenilenmiştir; kurulum hatasının ayrıntısı açılabilir ve işlem tekrar denenebilir.
+
+Güncelleme paketi hazırlanırken ilerleme çıkarılan dosya boyutlarından hesaplanır; paket doğrulanmadan tamamlandı gösterilmez. Windows klasör değişimini geçici olarak engellerse işlem en fazla iki saniye yeniden denenir; kalıcı hatada önceki kurulum korunur.
+
+**Veri tasarrufu** varsayılan olarak açıktır: Mod Merkezi çevrimiçi kapak görsellerini yüklemez; yerel görseller kullanılmaya devam eder. Mod indirmeleri ve katalog yenileme kullanıcı tarafından başlatılır. Açılan çevrimiçi rehberler kendi internet bağlantısını kullanır. Masaüstü ile oyun içi istemci arasındaki seçim değişiklikleri yerel kayıtlardan algılanır; bağlantı sorunu görünür biçimde bildirilir ve tekrar denenebilir.
+
+Profiller, paketler daha sonra eklense bile taşınabilir kimlikleriyle yeniden eşleşir. Aynı kimlikte farklı içerik yanlışlıkla uygulanmaz. Kayıtlı hedef kostüm oyun içi ekranın otomatik geri yüklemesiyle değiştirilmez. Eski çakışan seçimler onarılır; bir efekt seçimi diğer kategorideki modları kapatmaz. Silinen modlar bellekte kaldığı için yeniden uygulanmaz. İstemci seçim ekranları kaydedilen durumu yansıtır ve başarısız kayıtları bildirir.
+
+Ayarlar bütünüyle doğrulandıktan sonra tek seferde kaydedilir; başarısız kayıtta otomatik başlatma değişikliği geri alınır. Unicode dosya adları önbellekte doğru okunur; kullanılan çıkarma klasörleri bozuk bir damga nedeniyle değiştirilmez. Mod Merkezi `.modpkg` paketlerini de tanır. Paket doğrulaması gerçek WAD hedefi gerektirir; profil içe aktarma sınırı desteklenen 2.000 kaydı kapsayacak şekilde 4 MB'dır.
+
+Yerel kurulum: `release/OKDEV_Setup_2.0.0.exe`. Yerel güncelleme arşivi: `release/OKDEV_Update_2.0.0.zip`. Bu çalışma GitHub yayını içermez. Son arayüz çalışmasının test kanıtları, değişiklikleri ve doğrulama sınırları `output/ui2-20261030/` altında; önceki temel 2.0 çalışmasının kayıtları `output/v2-20261030/` altında tutulur. İstemci arayüzü kontrolleri yalıtılmış WebView2 ortamında yapılır; canlı League maçı doğrulaması değildir.
+
+## 1.5.8: Seçim, profil ve başarısız işlem düzeltmeleri
+
+Hub'da kapatılan istemci modları yeniden uygulanmaz; istemci listeleri eski geçmiş yerine ortak kayıttaki güncel seçimi gösterir. Eski modların aktarımında canlı seçim, görünen ad ve hedef kostüm korunur. Arşiv biçimindeki eski modlar da yedeklenerek kaldırılabilir, dışa aktarılabilir ve geri yüklenebilir.
+
+Profiller hedef kostümü de saklar; önizleme ve geri alma hedef değişikliklerini kapsar. Profil dosyalarının yeni biçimi, aynı yerel paket yeniden içe alındığında SHA-256 üzerinden tek bir eşleşme varsa onu bulur. Paket özeti olmayan eski kurulumlar, dışa aktarılırken dosya içerikleriyle tanımlanır. Eski profil dosyaları okunmaya devam eder. Birden fazla olası eşleşme varsa otomatik seçim yapılmaz.
+
+Tam ZIP senkronizasyonunda çıkarma hatası eski dosyaların temizlenmesini durdurur ve başarısızlık bildirilir. Yarım kalan alternatif klasör kopyası hazır kabul edilmez. İstemci içe aktarması paket doğrulamasını kullanır; geçmiş yazma hataları çağırana iletilir. Bozuk otomasyon tercihleri, ilgisiz ayarların kaydedilmesini engellemeden güvenli varsayılanlara döner.
+
+Üst koridor düzenleme seçeneği ve eksik kategori menüleri tamamlandı. Arşiv önbelleği içerik özetiyle yenilenir; kullanılmayan girdiler 7 gün / 32 girdi / 2 GiB sınırlarıyla temizlenir, etkin bağlantı hedefleri korunur. Yeniden başlatma yardımcısı Unicode ve yüzde işareti içeren yolları cmd genişletmesine sokmadan aktarır.
+
+## 1.5.7: Mod tutarlılığı ve kesinti sonrası kurtarma
+
+1.5.6 üzerine hazırlanan bakım sürümü. Hub ve League içindeki mod içe aktarma/silme işlemleri ortak kütüphane kaydı kullanır; istemciden silinen modlar Hub üzerinden geri alınabilir. Geçici LCU kesintilerinden sonra seçim durumu toparlanır; custom modun kendi kostüm hedefi korunur. Aynı adlı modlar ayrı yükleme klasörlerine ve önbelleklere yerleştirilir. Başarısız indirmede eski skin korunur; doğrulanamayan senkronizasyon hazır gösterilmez. Geçmiş dosyaları süreçler arası kilitle korunur, bozuk içerikler yedeklenir.
+
+Rehberin son manuel seçimi kısayolla gizle/göster sırasında korunur. Relay kaynak kodu dolu odada yeniden bağlanmayı ve yarım bağlantıların zaman aşımını düzeltir; sunucu değişikliği ayrıca dağıtılmalıdır.
+
+Sürümün tek kaynağı `config.py` içindeki `APP_VERSION` alanıdır. `python scripts/sync_release_version.py` kurulum ve Windows dosya sürümü alanlarını üretir; `--check` fark varsa hata verir. Yerel bakım derlemesinde değişmeyen native bileşenleri yeniden indirmeden kullanmak için `scripts/build_pyinstaller.py --skip-pengu-loader --skip-cslol-stub --skip-core` çalıştırılabilir. Yayın öncesinde tam Python testleri, `test/*.cjs` kontrolleri ve yeni paket için `scripts/check_release_candidate.py` çalıştırılmalıdır.
+
 ## 1.5.3: League oturumu açıkken uygulama güncellemesi
 
 Onaylanan güncelleme League açıkken de indirilir. Maç, sıra, hazır kontrolü, şampiyon seçimi veya durumu okunamayan istemci varken uygulanmaz. Paket doğrulanmış olarak bekler; OKDEV çalışmaya devam eder. İstemci ana ekrana, lobiye veya maç sonuna geldiğinde durum yeniden kontrol edilir ve normal OKDEV kapanışıyla güncelleme başlatılır. Aynı doğrulanmış paket için yeniden indirme veya tekrar onay gerekmez.

@@ -8,6 +8,7 @@ import hashlib
 import json
 import re
 import threading
+import time
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -103,6 +104,23 @@ def _finish(path):
         pass  # Committed/rolled-back records can safely be revisited.
 
 
+def _rename_folder(source, destination):
+    """Allow brief Windows sharing/access locks to settle without replacing data.
+
+    Newly copied executables may still have an external reader. Retry only the
+    Windows lock/access errors, with a fixed deadline; permanent failures still
+    reach the ordinary rollback and retain the previous installation.
+    """
+    deadline = time.monotonic() + 2
+    while True:
+        try:
+            return source.rename(destination)
+        except OSError as error:
+            if getattr(error, 'winerror', None) not in (5, 32, 33) or time.monotonic() >= deadline:
+                raise
+            time.sleep(.05)
+
+
 def recover(target):
     """Recover a previous interrupted swap. Caller owns installation_lock."""
     target = _target(target)
@@ -125,7 +143,7 @@ def recover(target):
             else:
                 raise ValueError('Kurulum kimliği değişmiş; özgün klasörler korundu.')
         elif backup.exists() and _fingerprint(backup) == record['before']:
-            backup.rename(target)
+            _rename_folder(backup, target)
             status = 'rolled_back'
         else:
             raise ValueError('Önceki kurulum yedeği bulunamadı; işlem kaydı korundu.')
@@ -151,11 +169,11 @@ def commit(target, prepared, backup):
         with atomic_write(journal) as stream:
             json.dump(record, stream, ensure_ascii=False)
         try:
-            target.rename(backup)
-            prepared.rename(target)
+            _rename_folder(target, backup)
+            _rename_folder(prepared, target)
         except Exception:
             if backup.exists() and not target.exists():
-                backup.rename(target)
+                _rename_folder(backup, target)
             if target.exists() and not backup.exists() and _fingerprint(target) == record['before']:
                 _finish(journal)
             raise

@@ -20,6 +20,27 @@ def inspect(path):
     if path.stat().st_size > MAX_DOWNLOAD:
         raise ValueError('Mod en fazla 512 MB olabilir')
     suggested, warning = {}, ''
+    if path.suffix.lower() == '.modpkg':
+        from utils.core.modpkg import ModPackage
+        with ModPackage.open(path) as package:
+            if not package.wad_file_count:
+                raise ValueError('Mod paketinde WAD oyun dosyaları bulunamadı.')
+            raw = package.metadata()
+            for key, source, limit in [('name', 'display_name', 100), ('description', 'description', 2000), ('version', 'version', 48)]:
+                value = raw.get(source, raw.get('name') if key == 'name' else None)
+                if isinstance(value, str) and value.strip():
+                    if key != 'version' or re.fullmatch(r'[0-9]+(?:\.[0-9]+){2,4}', value):
+                        suggested[key] = value.strip()[:limit]
+            authors = raw.get('authors')
+            if isinstance(authors, list):
+                names = [a['name'].strip() for a in authors if isinstance(a, dict) and isinstance(a.get('name'), str)]
+                if names:
+                    suggested['author'] = ', '.join(names)[:100]
+            files = package.file_paths()
+        suggested.update(_detect_champion(files))
+        suggested.setdefault('name', path.stem[:100])
+        suggested['id'] = slug(suggested['name']) or 'yerel-mod'
+        return {'name': path.name, 'suggested': suggested, 'warning': warning}
     try:
         with zipfile.ZipFile(path) as archive:
             files = archive.infolist()
@@ -43,21 +64,26 @@ def inspect(path):
                             suggested['version'] = version
                 except (ValueError, RuntimeError, RecursionError):
                     warning = 'Paket bilgileri okunamadı. Alanları elle doldurabilirsin.'
-            base = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parents[1]))
-            champions = json.loads((base / 'hub/web/champions.json').read_text(encoding='utf-8'))['champions']
-            names = {slug(c['name']).replace('-', ''): c for c in champions}
-            names['monkeyking'] = next(c for c in champions if c['id'] == 62)
-            found = {}
-            for member in files:
-                match = re.fullmatch(r'wad/([^/]+)\.wad\.client(?:/.*)?', member.filename.lower())
-                if match and match[1] in names:
-                    champion = names[match[1]]
-                    found[champion['id']] = champion
-            if len(found) == 1:
-                champion = next(iter(found.values()))
-                suggested.update(champion=champion['name'], champion_id=champion['id'], category='skins')
+            suggested.update(_detect_champion(member.filename for member in files))
     except (zipfile.BadZipFile, NotImplementedError, RuntimeError):
         raise ValueError('Bu dosya okunabilir bir .fantome veya .zip paketi değil.') from None
     suggested.setdefault('name', path.stem[:100])
     suggested['id'] = slug(suggested['name']) or 'yerel-mod'
     return {'name': path.name, 'suggested': suggested, 'warning': warning}
+
+
+def _detect_champion(files):
+    base = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parents[1]))
+    champions = json.loads((base / 'hub/web/champions.json').read_text(encoding='utf-8'))['champions']
+    names = {slug(c['name']).replace('-', ''): c for c in champions}
+    names['monkeyking'] = next(c for c in champions if c['id'] == 62)
+    found = {}
+    for filename in files:
+        match = re.fullmatch(r'wad/([^/]+)\.wad\.client(?:/.*)?', filename.lower())
+        if match and match[1] in names:
+            champion = names[match[1]]
+            found[champion['id']] = champion
+    if len(found) == 1:
+        champion = next(iter(found.values()))
+        return dict(champion=champion['name'], champion_id=champion['id'], category='skins')
+    return {}

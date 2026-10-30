@@ -13,22 +13,41 @@ def _ids(values):
 
 
 def revision(data):
-    fields = ('id', 'enabled', 'relative_path', 'version', 'sha256', 'category', 'champion_id')
+    fields = ('id', 'enabled', 'relative_path', 'version', 'sha256', 'package_sha256', 'category', 'champion_id', 'target_skin_ids', 'selected_target_skin_id')
     value = {key: {field: item.get(field) for field in fields} for key, item in data.items()}
     return hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=True).encode()).hexdigest()
 
 
 def _group(item):
     category = item.get('category', 'skins')
-    return category, item.get('champion_id') if category == 'skins' else None
+    return category, (item['id'] if category in library.MULTI_CATEGORIES else
+                      item.get('champion_id') if category == 'skins' else None)
 
 
-def _plan(data, mod_ids, mode):
+def skin_targets(data, ids):
+    result = {}
+    for key in ids:
+        item = data[key]
+        if item.get('category', 'skins') == 'skins':
+            targets = item.get('target_skin_ids') or [item['champion_id'] * 1000]
+            result[key] = item.get('selected_target_skin_id') if item.get('selected_target_skin_id') in targets else targets[0]
+    return result
+
+
+def _plan(data, mod_ids, mode, targets=None):
     requested = _ids(mod_ids)
     if mode not in ('enable', 'disable', 'replace'):
         raise ValueError('Geçersiz seçim işlemi.')
     if requested - data.keys():
         raise ValueError('Seçilen modlardan bazıları artık kütüphanede değil. Listeyi yenile.')
+    targets = {} if targets is None else targets
+    if not isinstance(targets, dict) or targets.keys() - requested or mode == 'disable' and targets:
+        raise ValueError('Profilin kostüm hedefleri geçersiz.')
+    for key, target in targets.items():
+        item = data[key]
+        if (item.get('category', 'skins') != 'skins' or type(target) is not int or
+                target not in (item.get('target_skin_ids') or [item['champion_id'] * 1000])):
+            raise ValueError('Profildeki kostüm hedefi artık bu modda yok. Profili güncelle.')
     before = {key for key, item in data.items() if item['enabled']}
     if mode == 'disable':
         selected = before - requested
@@ -36,7 +55,7 @@ def _plan(data, mod_ids, mode):
         groups = {}
         for mod_id in sorted(requested):
             item = data[mod_id]
-            if not library.mod_folder(item).is_dir():
+            if not library.mod_available(item):
                 raise ValueError(item['name'] + ' dosyaları bulunamadı. Önce geri yükle veya yeniden ekle.')
             group = _group(item)
             if group in groups:
@@ -44,20 +63,25 @@ def _plan(data, mod_ids, mode):
             groups[group] = item['name']
         selected = requested if mode == 'replace' else requested | {key for key in before if _group(data[key]) not in groups}
     describe = lambda ids: [{'id': key, 'name': data[key]['name'], 'category': data[key].get('category', 'skins')} for key in sorted(ids)]
+    before_targets = skin_targets(data, before)
+    after_targets = dict(skin_targets(data, selected), **targets)
+    target_changes = [{'id': key, 'name': data[key]['name'], 'skin_id': value}
+                      for key, value in targets.items() if skin_targets(data, [key]).get(key) != value]
     return {'revision': revision(data), 'mode': mode, 'requested': sorted(requested),
             'before': sorted(before), 'after': sorted(selected), 'enable': describe(selected - before),
-            'disable': describe(before - selected), 'changed': selected != before}
+            'disable': describe(before - selected), 'changed': selected != before or bool(target_changes),
+            'targets': targets, 'before_targets': before_targets, 'after_targets': after_targets, 'target_changes': target_changes}
 
 
-def preview(mod_ids, mode='enable'):
+def preview(mod_ids, mode='enable', targets=None):
     with library.mutation_lock():
-        return _plan(library.installed(strict=True), mod_ids, mode)
+        return _plan(library.installed(strict=True), mod_ids, mode, targets)
 
 
-def apply(mod_ids, mode='enable', expected_revision=None, remember=True):
+def apply(mod_ids, mode='enable', expected_revision=None, remember=True, targets=None):
     with library.mutation_lock():
         data = library.installed(strict=True)
-        plan = _plan(data, mod_ids, mode)
+        plan = _plan(data, mod_ids, mode, targets)
         if expected_revision is not None and expected_revision != plan['revision']:
             raise ValueError('Mod listesi değişti. Güncel değişiklikleri tekrar kontrol et.')
         if not plan['changed']:
@@ -66,12 +90,16 @@ def apply(mod_ids, mode='enable', expected_revision=None, remember=True):
         # Persist the undo intent first. If the index write fails, the stored
         # expected state will not match and undo will safely refuse to run.
         journal = {'schema': 1, 'before': plan['before'] if remember else plan['after'], 'after': plan['after'],
-                   'created_at': int(time.time()), 'revision': plan['revision']}
+                   'created_at': int(time.time()), 'revision': plan['revision'],
+                   'before_targets': plan['before_targets'] if remember else plan['after_targets'],
+                   'after_targets': plan['after_targets']}
         library.write_json(library.root() / 'selection-undo.json', journal)
         for item in data.values():
             if item['enabled'] and item['id'] not in after:
                 library._clear_history(item)
             item['enabled'] = item['id'] in after
+            if item['id'] in plan['targets']:
+                item['selected_target_skin_id'] = plan['targets'][item['id']]
         library.write_json(library.root() / 'installed.json', data)
         from .activity import record
         record('selection' if remember else 'undo', count=len(plan['enable']) + len(plan['disable']))
@@ -86,7 +114,9 @@ def undo_status(data=None):
             return {'available': False}
         before, after = _ids(record.get('before')), _ids(record.get('after'))
         current = {key for key, item in data.items() if item['enabled']}
-        available = current == after and before != after and before <= data.keys()
+        available = (current == after and before <= data.keys() and
+                     (before != after or record.get('before_targets') != record.get('after_targets')) and
+                     ('after_targets' not in record or skin_targets(data, current) == record['after_targets']))
         return {'available': available, 'restore_count': len(before)}
     except (ValueError, TypeError):
         return {'available': False}
@@ -98,4 +128,4 @@ def undo():
         if not undo_status()['available']:
             raise ValueError('Seçimler değiştiği için bu işlem geri alınamıyor.')
         # Applying the old set also validates missing files and category conflicts.
-        return apply(record['before'], 'replace', remember=False)
+        return apply(record['before'], 'replace', remember=False, targets=record.get('before_targets'))

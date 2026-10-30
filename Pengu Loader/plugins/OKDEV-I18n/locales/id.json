@@ -185,5 +185,15 @@
   "Administrator privileges are required to enable auto-start.": "Butuh hak administrator untuk mengaktifkan mulai otomatis.",
   "Administrator privileges are required to disable auto-start.": "Butuh hak administrator untuk menonaktifkan mulai otomatis.",
   "Failed to enable auto-start: {error}": "Gagal mengaktifkan mulai otomatis: {error}",
-  "Failed to disable auto-start: {error}": "Gagal menonaktifkan mulai otomatis: {error}"
+  "Failed to disable auto-start: {error}": "Gagal menonaktifkan mulai otomatis: {error}",
+  "Connection lost. Reopen OKDEV and try again.": "Koneksi terputus. Buka kembali OKDEV dan coba lagi.",
+  "No response received. Check the connection before saving again.": "Tidak ada respons. Periksa koneksi sebelum menyimpan lagi.",
+  "Mod imported: {name}": "Mod diimpor: {name}",
+  "Reload list": "Muat ulang daftar",
+  "Operation failed": "Operasi gagal",
+  "No response received. Reload the list to check the result.": "Tidak ada respons. Muat ulang daftar untuk memeriksa hasilnya.",
+  "Game path is valid": "Lokasi game valid",
+  "Game path is invalid": "Lokasi game tidak valid",
+  "Validating game path…": "Memeriksa lokasi game…",
+  "Support": "Bantuan"
 }

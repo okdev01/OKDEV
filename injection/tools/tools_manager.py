@@ -17,10 +17,10 @@ from .patcher import LTK_PATCHER_DLL, LTK_PATCHER_HOST
 
 class ToolsManager:
     """Manages CSLOL tools detection and validation"""
-    
+
     def __init__(self, tools_dir: Path):
         self.tools_dir = tools_dir
-    
+
     def check_tools_available(self) -> bool:
         """Check if the runtime injection tool is present."""
         required_tools = [
@@ -33,14 +33,14 @@ class ToolsManager:
         for tool in required_tools:
             if not (self.tools_dir / tool).exists():
                 missing_tools.append(tool)
-        
+
         if missing_tools:
             log.warning(f"Missing runtime injection dependencies: {missing_tools}")
             log.warning("Please place the missing files in injection/tools/")
             return False
-        
+
         return True
-    
+
     def detect_tools(self) -> Dict[str, Path]:
         """Detect runtime injection tools."""
         tools = {

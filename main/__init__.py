@@ -10,7 +10,7 @@ from typing import Optional
 from pathlib import Path
 
 # Python version check
-MIN_PYTHON = (3, 11)
+MIN_PYTHON = (3, 12)
 if sys.version_info < MIN_PYTHON:
     raise RuntimeError(
         f"OKDEV requires Python {MIN_PYTHON[0]}.{MIN_PYTHON[1]} or newer. "
@@ -441,56 +441,38 @@ def _update_registry_version() -> None:
         pass
 
 def _schedule_restart() -> bool:
-    """Spawn a detached helper that relaunches OKDEV after this process exits.
-
-    The new instance cannot start while the current one is still alive because
-    of the single-instance mutex, so a small batch file waits for this PID to
-    exit and then starts OKDEV again.
-    """
+    """Wait for this process, then relaunch without cmd expansion or code pages."""
+    import base64
     import os
     import subprocess
-    import tempfile
 
     try:
-        pid = os.getpid()
-        if getattr(sys, 'frozen', False):
-            exe_path = Path(sys.executable).resolve()
-            workdir = exe_path.parent
-            launch_cmd = f'start "" /D "{workdir}" "{exe_path}"'
-        else:
-            # Development mode: relaunch `python main.py` from the project root
-            exe_path = Path(sys.executable).resolve()
-            workdir = Path(__file__).parent.parent
-            launch_cmd = f'start "" /D "{workdir}" "{exe_path}" "main.py"'
-
-        batch_path = Path(tempfile.gettempdir()) / f"okdev_restart_{pid}.bat"
-
-        batch_content = (
-            "@echo off\n"
-            "setlocal enableextensions\n"
-            f'set "TARGET_PID={pid}"\n'
-            ":wait\n"
-            'tasklist /FI "PID eq %TARGET_PID%" /NH 2>NUL | find /I "%TARGET_PID%" >NUL\n'
-            'if not errorlevel 1 (\n'
-            '    ping 127.0.0.1 -n 2 >NUL\n'
-            '    goto wait\n'
-            ')\n'
-            f"{launch_cmd}\n"
-            'del "%~f0" >NUL 2>&1\n'
-            "exit\n"
+        exe_path = Path(sys.executable).resolve()
+        frozen = getattr(sys, 'frozen', False)
+        workdir = exe_path.parent if frozen else Path(__file__).parent.parent
+        literal = lambda value: "'" + str(value).replace("'", "''") + "'"
+        script = (
+            f"$previous = Get-Process -Id {os.getpid()} -ErrorAction SilentlyContinue; "
+            "if ($previous) { $previous.WaitForExit() }; "
+            "$launch = New-Object System.Diagnostics.ProcessStartInfo; "
+            f"$launch.FileName = {literal(exe_path)}; "
+            f"$launch.WorkingDirectory = {literal(workdir)}; "
+            "$launch.UseShellExecute = $false; "
+            + ("$launch.Arguments = 'main.py'; " if not frozen else "")
+            + "[System.Diagnostics.Process]::Start($launch) | Out-Null"
         )
-        batch_path.write_text(batch_content, encoding="utf-8")
-
+        encoded = base64.b64encode(script.encode('utf-16-le')).decode('ascii')
+        shell = Path(os.environ.get('SystemRoot', r'C:\Windows')) / 'System32/WindowsPowerShell/v1.0/powershell.exe'
         subprocess.Popen(
-            ["cmd", "/c", str(batch_path)],
-            close_fds=True,
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            [str(shell), '-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-EncodedCommand', encoded],
+            close_fds=True, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0),
         )
-        log.info(f"Restart scheduled via {batch_path}")
+        log.info('Restart scheduled via Unicode process helper')
         return True
     except Exception as e:
-        log.error(f"Failed to schedule restart: {e}")
+        log.error(f'Failed to schedule restart: {e}')
         return False
+
 
 def run_league_unlock(args: Optional[argparse.Namespace] = None,
                       injection_threshold: Optional[float] = None) -> None:
@@ -508,7 +490,7 @@ def run_league_unlock(args: Optional[argparse.Namespace] = None,
     # Parse arguments if they were not provided
     if args is None:
         args = setup_arguments()
-    
+
     # Setup logging and cleanup
     setup_logging_and_cleanup(args)
 
@@ -518,25 +500,25 @@ def run_league_unlock(args: Optional[argparse.Namespace] = None,
     from hub.preferences import get as hub_preferences
     if not hub_preferences()['start_minimized']:
         open_hub()
-    
+
     # Initialize app status manager
     app_status = AppStatus(tray_manager)
     log_success(log, "App status manager initialized", "")
-    
+
     # Check initial status (will show locked until all components are ready)
     app_status.update_status(force=True)
-    
+
     # Initialize core components
     lcu, skin_scraper, state, injection_manager = initialize_core_components(args, injection_threshold)
     from hub.helpers import start_helpers
     start_helpers(state)
     from launcher.update.pending import start_watcher
     start_watcher(state)
-    
+
     # Configure skin writing based on the final injection threshold (seconds → ms)
     state.skin_write_ms = max(0, int(injection_manager.injection_threshold * 1000))
     state.inject_batch = getattr(args, 'inject_batch', state.inject_batch) or state.inject_batch
-    
+
     # Create LCU disconnection handler
     on_lcu_disconnected = create_lcu_disconnection_handler(state, skin_scraper, app_status)
 
@@ -559,7 +541,7 @@ def run_league_unlock(args: Optional[argparse.Namespace] = None,
             state.stop = True
             log.debug(f"[DEBUG] State after setting stop: {state.stop}")
             log.info("Stop flag set - main loop should exit")
-            
+
             # Immediately try to trigger any pending console operations that might be blocking
             if sys.platform == "win32":
                 try:
@@ -569,7 +551,7 @@ def run_league_unlock(args: Optional[argparse.Namespace] = None,
                         msvcrt.getch()  # Consume any pending input
                 except (ImportError, OSError) as e:
                     log.debug(f"Console input check failed: {e}")
-            
+
             # Add a timeout to force quit if main loop doesn't exit
             def force_quit_timeout():
                 import time
@@ -580,11 +562,11 @@ def run_league_unlock(args: Optional[argparse.Namespace] = None,
                 if not app_state.shutting_down:
                     log.warning(f"Main loop did not exit within {MAIN_LOOP_FORCE_QUIT_TIMEOUT_S}s - forcing quit")
                     force_quit_handler()
-            
-            timeout_thread = create_daemon_thread(target=force_quit_timeout, 
+
+            timeout_thread = create_daemon_thread(target=force_quit_timeout,
                                                  name="ForceQuitTimeout")
             timeout_thread.start()
-        
+
         tray_manager.quit_callback = updated_tray_quit_callback
 
         def updated_tray_restart_callback():
@@ -621,24 +603,21 @@ def run_league_unlock(args: Optional[argparse.Namespace] = None,
             timeout_thread.start()
 
         tray_manager.restart_callback = updated_tray_restart_callback
-    
+
     # Initialize threads (this starts the WebSocket server)
     thread_manager, t_phase, t_ui, t_ws, t_lcu_monitor = initialize_threads(
         lcu, state, args, injection_manager, skin_scraper, app_status, on_lcu_disconnected, on_lcu_reconnected
     )
-    
-    # Wait for WebSocket status to be active before activating Pengu Loader
-    log.info("Waiting for WebSocket status to be active before activating Pengu Loader...")
-    while not t_ws.connection.is_connected:
-        time.sleep(0.1)
-    
-    log.info("WebSocket status is active, proceeding with Pengu Loader and injection system setup")
-    
-    # Setup Pengu Loader and injection system (LCU is already connected when WebSocket is active)
-    _setup_pengu_and_injection(lcu, injection_manager)
-    
-    # Run main loop
+
     try:
+        log.info("Waiting for WebSocket status before activating Pengu Loader...")
+        while not t_ws.connection.is_connected:
+            if state.stop:
+                return
+            time.sleep(0.1)
+        if state.stop:
+            return
+        _setup_pengu_and_injection(lcu, injection_manager)
         run_main_loop(state, skin_scraper)
     finally:
         # Perform cleanup
@@ -671,7 +650,7 @@ def main() -> None:
     run_league_unlock(args=args)
 
 
-if __name__ == "__main__":
+def guarded_main():
     try:
         main()
     except Exception as e:
@@ -689,7 +668,7 @@ if __name__ == "__main__":
             )
         except Exception:
             pass
-        
+
         error_msg = f"""
 ================================================================================
 FATAL ERROR - OKDEV Crashed
@@ -705,16 +684,16 @@ This error has been logged. Please report this issue with the log file.
 Log location: Check %LOCALAPPDATA%\\OKDEV\\logs\\
 ================================================================================
 """
-        
+
         # Try to log the error
         try:
             log = get_logger()
             log.error(error_msg)
-        except (AttributeError, RuntimeError, OSError) as e:
+        except (AttributeError, RuntimeError, OSError) as log_error:
             # If logging fails, print to stderr
             print(error_msg, file=sys.stderr)
-            print(f"Logging system error: {e}", file=sys.stderr)
-        
+            print(f"Logging system error: {log_error}", file=sys.stderr)
+
         # Show error dialog on Windows
         if sys.platform == "win32":
             try:
@@ -726,5 +705,9 @@ Log location: Check %LOCALAPPDATA%\\OKDEV\\logs\\
                 )
             except Exception:
                 pass
-        
+
         sys.exit(1)
+
+
+if __name__ == "__main__":
+    guarded_main()

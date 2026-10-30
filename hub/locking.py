@@ -6,7 +6,7 @@ from contextlib import contextmanager
 
 
 @contextmanager
-def settings_lock(path):
+def settings_lock(path, timeout_ms=5000):
     if os.name != 'nt':
         import fcntl
         with path.with_suffix('.lock').open('a+b') as stream:
@@ -30,7 +30,7 @@ def settings_lock(path):
         raise ValueError('Ayarlar şu anda kaydedilemiyor. Birazdan tekrar dene.')
     acquired = False
     try:
-        acquired = kernel.WaitForSingleObject(handle, 5000) in (0, 0x80)
+        acquired = kernel.WaitForSingleObject(handle, timeout_ms) in (0, 0x80)
         if not acquired:
             raise ValueError('Başka bir ayar kaydediliyor. Birazdan tekrar dene.')
         yield

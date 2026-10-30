@@ -24,18 +24,17 @@ File format: mod_historic.json with shape:
 from __future__ import annotations
 
 import json
-import threading
 from pathlib import Path
 from typing import Dict, Optional, Union, List, Iterable
 
 from utils.core.atomic_file import atomic_write
+from utils.core.history_store import history_lock, read_mapping
 from utils.core.logging import get_logger
 from utils.core.paths import get_user_data_dir
 
 log = get_logger()
 
-# Read-modify-write cycles run from several threads (injection, UI, Pengu bridge)
-_write_lock = threading.RLock()
+# All readers that migrate and all writers share history_store.history_lock.
 
 
 def _write_json(path: Path, data: dict) -> None:
@@ -88,6 +87,11 @@ def _mod_historic_file_path() -> Path:
 
 
 def load_mod_historic() -> Dict[str, Union[str, List[str]]]:
+    with history_lock(get_user_data_dir()):
+        return _load_mod_historic_locked()
+
+
+def _load_mod_historic_locked() -> Dict[str, Union[str, List[str]]]:
     """Load the mod historic mapping. Returns empty dict if missing or invalid.
 
     Normalized shape returned:
@@ -101,8 +105,7 @@ def load_mod_historic() -> Dict[str, Union[str, List[str]]]:
         p = _mod_historic_file_path()
         if not p.exists():
             return {}
-        with p.open("r", encoding="utf-8") as f:
-            data = json.load(f)
+        data = read_mapping(p)
         if isinstance(data, dict):
             result: Dict[str, Union[str, List[str]]] = {}
 
@@ -149,7 +152,7 @@ def load_mod_historic() -> Dict[str, Union[str, List[str]]]:
                         items = result.get(cat, [])
                         if isinstance(items, list) and items:
                             compact[cat] = items
-                    with _write_lock:
+                    with history_lock(get_user_data_dir()):
                         _write_json(p, compact)
                 except Exception as e:
                     log.warning(f"[HISTORIC] Could not migrate legacy mod history: {e}")
@@ -165,6 +168,8 @@ def load_mod_historic() -> Dict[str, Union[str, List[str]]]:
                     out[cat] = items
             return out
         return {}
+    except OSError:
+        raise
     except Exception:
         return {}
 
@@ -201,7 +206,7 @@ def write_historic_mod(mod_type: str, relative_path: Union[str, List[str]]) -> N
         mod_type: "map"/"font"/"announcer" or a category key (ui/voiceover/loading_screen/vfx/sfx/others).
         relative_path: For category keys, can be a list of relative paths. For single-select keys, must be a string.
     """
-    with _write_lock:
+    with history_lock(get_user_data_dir()):
         _write_historic_mod_locked(mod_type, relative_path)
 
 
@@ -242,6 +247,7 @@ def _write_historic_mod_locked(mod_type: str, relative_path: Union[str, List[str
         _write_json(p, m)
     except Exception as e:
         log.warning(f"[HISTORIC] Could not save {mod_type} mod history: {e}")
+        raise
 
 
 def clear_historic_mod(mod_type: str) -> None:
@@ -250,7 +256,7 @@ def clear_historic_mod(mod_type: str) -> None:
     Args:
         mod_type: One of "map", "font", "announcer", "other"
     """
-    with _write_lock:
+    with history_lock(get_user_data_dir()):
         _clear_historic_mod_locked(mod_type)
 
 
@@ -278,4 +284,5 @@ def _clear_historic_mod_locked(mod_type: str) -> None:
         _write_json(p, m)
     except Exception as e:
         log.warning(f"[HISTORIC] Could not clear {mod_type} mod history: {e}")
+        raise
 

@@ -185,5 +185,15 @@
   "Administrator privileges are required to enable auto-start.": "Do włączenia autostartu wymagane są uprawnienia administratora.",
   "Administrator privileges are required to disable auto-start.": "Do wyłączenia autostartu wymagane są uprawnienia administratora.",
   "Failed to enable auto-start: {error}": "Nie udało się włączyć autostartu: {error}",
-  "Failed to disable auto-start: {error}": "Nie udało się wyłączyć autostartu: {error}"
+  "Failed to disable auto-start: {error}": "Nie udało się wyłączyć autostartu: {error}",
+  "Connection lost. Reopen OKDEV and try again.": "Utracono połączenie. Otwórz ponownie OKDEV i spróbuj jeszcze raz.",
+  "No response received. Check the connection before saving again.": "Nie otrzymano odpowiedzi. Sprawdź połączenie przed ponownym zapisaniem.",
+  "Mod imported: {name}": "Zaimportowano mod: {name}",
+  "Reload list": "Odśwież listę",
+  "Operation failed": "Operacja nie powiodła się",
+  "No response received. Reload the list to check the result.": "Nie otrzymano odpowiedzi. Odśwież listę, aby sprawdzić wynik.",
+  "Game path is valid": "Ścieżka gry jest prawidłowa",
+  "Game path is invalid": "Ścieżka gry jest nieprawidłowa",
+  "Validating game path…": "Sprawdzanie ścieżki gry…",
+  "Support": "Pomoc"
 }

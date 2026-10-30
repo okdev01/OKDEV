@@ -185,5 +185,15 @@
   "Administrator privileges are required to enable auto-start.": "자동 시작을 켜려면 관리자 권한이 필요합니다.",
   "Administrator privileges are required to disable auto-start.": "자동 시작을 끄려면 관리자 권한이 필요합니다.",
   "Failed to enable auto-start: {error}": "자동 시작을 켜지 못했습니다: {error}",
-  "Failed to disable auto-start: {error}": "자동 시작을 끄지 못했습니다: {error}"
+  "Failed to disable auto-start: {error}": "자동 시작을 끄지 못했습니다: {error}",
+  "Connection lost. Reopen OKDEV and try again.": "연결이 끊겼습니다. OKDEV를 다시 열고 재시도하세요.",
+  "No response received. Check the connection before saving again.": "응답이 없습니다. 다시 저장하기 전에 연결을 확인하세요.",
+  "Mod imported: {name}": "모드 가져오기 완료: {name}",
+  "Reload list": "목록 새로고침",
+  "Operation failed": "작업 실패",
+  "No response received. Reload the list to check the result.": "응답이 없습니다. 목록을 새로고침하여 결과를 확인하세요.",
+  "Game path is valid": "게임 경로가 유효합니다",
+  "Game path is invalid": "게임 경로가 유효하지 않습니다",
+  "Validating game path…": "게임 경로 확인 중…",
+  "Support": "지원"
 }

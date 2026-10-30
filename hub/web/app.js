@@ -41,23 +41,114 @@ const HubView = {
 if (typeof module !== 'undefined') module.exports = HubView;
 
 if (typeof document !== 'undefined') {
-  let state = {catalog: [], installed: {}, settings: {favorites: []}, preferences: {}, guide: {}, companion: {}}, busy = false, api = null;
-  let sourceId = null, removeId = null, noticeTimer;
+  let state = {catalog: [], installed: {}, settings: {favorites: []}, preferences: {data_saver:true}, guide: {}, companion: {}}, busy = false, api = null;
+  let sourceId = null, removeId = null, noticeTimer, selectedFile = false;
   let stateEpoch = 0, snapshotRequest = 0;
   const $ = id => document.getElementById(id);
   const boot = window.HUB_DATA || {sources: [], champions: []};
-  const categories = {skins: 'Şampiyon', ui: 'HUD / Arayüz', maps: 'Harita', fonts: 'Yazı tipi', announcers: 'Spiker'};
-  const titles = {home: 'Oyuna kendi tarzını kat.', library: 'Keşfet', installed: 'Senin modların', profiles: 'Mod profillerin', assistants: 'Tam sana göre.', diagnostics: 'Sistem durumu', guides: 'Oyun rehberin', publish: 'Mod ekle', downloads: 'İndirmelerin'};
+  if (boot.appearance && typeof boot.appearance === 'object') {
+    state.preferences = {...state.preferences, ...boot.appearance};
+  }
+  const categories = {skins: 'Şampiyon', ui: 'HUD / Arayüz', maps: 'Harita', fonts: 'Yazı tipi', announcers: 'Spiker', voiceover: 'Seslendirme', loading_screen: 'Yükleme ekranı', vfx: 'Görsel efekt', sfx: 'Ses efekti', others: 'Diğer'};
+  const titles = {home: 'Oyun alanın', library: 'Keşfet', installed: 'Modlarım', profiles: 'Profiller', assistants: 'Ayarlar', diagnostics: 'Sistem durumu', guides: 'Oyun rehberi', publish: 'Mod ekle', downloads: 'İndirmeler'};
   let currentPage = 'home';
   const selectedMods = new Set();
   let catalogLimit = 24, installedLimit = 24, recoveryLimit = 20, filterSignature = '';
   const coverCache = new Map(), pendingCovers = new Set();
+  let commandEntries = [], commandIndex = 0, syncPolling = false;
+  let initialized = false, connecting = false;
+  const categoryIcons = {skins:'spark',ui:'grid',maps:'map',fonts:'list',announcers:'volume',voiceover:'volume',loading_screen:'layers',vfx:'spark',sfx:'volume',others:'layers'};
+
+  function setConnection(connected) {
+    $('connection').textContent = connected ? 'Yerel bağlantı hazır' : 'Bağlantı yenileniyor';
+    $('bridgeNotice').hidden = connected;
+    document.body.classList.toggle('bridge-offline', !connected);
+    document.body.classList.toggle('bridge-ready', connected);
+    if (!connected) $('loadingBanner').hidden = true;
+  }
+  async function readBridge(promise) {
+    let timer;
+    try {
+      return await Promise.race([promise, new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error('Uygulama yanıt vermedi. Bağlantıyı yeniden dene.')), 12000);
+      })]);
+    } finally { clearTimeout(timer); }
+  }
+  function openCommand() {
+    if (document.querySelector('dialog[open]')) return;
+    $('commandSearch').value = '';
+    renderCommands(); $('commandDialog').showModal(); $('commandSearch').focus();
+  }
+  function renderCommands() {
+    const term = $('commandSearch').value.trim(), tokens = HubView.normalize(term).split(/\s+/).filter(Boolean);
+    const entries = Object.entries(titles).map(([id, name]) => ({name, detail:'Sayfa', kind:'page', action:()=>{
+      page(id); $('title').tabIndex=-1; $('title').focus({preventScroll:true});
+    }}));
+    for (const mod of Object.values(state.installed)) entries.push({name:mod.name, detail:[mod.champion,categories[mod.category || 'skins'],mod.enabled?'Etkin':'Kapalı'].filter(Boolean).join(' · '), kind:'mod', action:()=>showDetail(mod,true)});
+    commandEntries = entries.filter(item => tokens.every(token => HubView.normalize(item.name+' '+item.detail).includes(token)))
+      .sort((a,b)=>term ? Number(b.kind==='mod')-Number(a.kind==='mod') : 0).slice(0,12);
+    commandIndex=0; const target=$('commandResults'); target.replaceChildren();
+    commandEntries.forEach((entry,index)=>{
+      const row=button('',()=>chooseCommand(index)); row.id='command-option-'+index; row.className='command-result';
+      row.tabIndex=-1; row.setAttribute('role','option');
+      const text=element('span','command-result-text'); text.append(element('strong','',entry.name),element('small','',entry.detail));
+      row.append(element('span','command-icon',entry.kind==='mod'?'◇':'↗'),text,element('span','command-enter','↵'));
+      target.append(row);
+    });
+    $('commandEmpty').hidden=commandEntries.length>0; updateCommandFocus();
+  }
+  function updateCommandFocus() {
+    [...$('commandResults').children].forEach((row,index)=>row.setAttribute('aria-selected',String(index===commandIndex)));
+    if (commandEntries.length) {
+      $('commandSearch').setAttribute('aria-activedescendant','command-option-'+commandIndex);
+      $('commandResults').children[commandIndex]?.scrollIntoView?.({block:'nearest'});
+    } else $('commandSearch').removeAttribute('aria-activedescendant');
+  }
+  function chooseCommand(index) {
+    const entry=commandEntries[index]; if (!entry) return;
+    $('commandDialog').close(); entry.action();
+  }
 
   function element(tag, className, text) {
     const el = document.createElement(tag);
     if (className) el.className = className;
     if (text !== undefined) el.textContent = text;
     return el;
+  }
+  function icon(name) {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+    use.setAttribute('href', '#i-' + name); svg.setAttribute('aria-hidden', 'true'); svg.append(use);
+    return svg;
+  }
+  function settingTab(key, focus = false) {
+    const active = document.querySelector('[data-settings-tab="' + key + '"]');
+    if (!active) return;
+    document.querySelectorAll('[data-settings-tab]').forEach(tab => {
+      const selected = tab === active;
+      tab.setAttribute('aria-selected', String(selected)); tab.tabIndex = selected ? 0 : -1;
+      $(tab.getAttribute('aria-controls')).hidden = !selected;
+    });
+    if (focus) active.focus();
+  }
+  function renderFilters() {
+    for (const [host, search, category, status] of [
+      ['library', 'search', 'categoryFilter', 'favoritesOnly'],
+      ['installed', 'installedSearch', 'installedCategory', 'installedFilter'],
+    ]) {
+      const target = $(host + 'Chips'); target.replaceChildren();
+      const chips = [];
+      if ($(search).value.trim()) chips.push(['Arama: ' + $(search).value.trim(), () => $(search).value = '']);
+      if ($(category).value) chips.push([categories[$(category).value], () => $(category).value = '']);
+      if (host === 'library' && $(status).checked) chips.push(['Favorilerim', () => $(status).checked = false]);
+      if (host === 'installed' && $(status).value !== 'all') chips.push([$(status).selectedOptions[0].textContent, () => $(status).value = 'all']);
+      chips.forEach(([label, reset]) => {
+        const chip = button('', () => { reset(); render(); $(search).focus({preventScroll:true}); });
+        chip.className = 'filter-chip'; chip.setAttribute('aria-label', label + ' filtresini kaldır');
+        chip.append(element('span', '', label), element('span', '', '×')); target.append(chip);
+      });
+      target.hidden = !chips.length;
+    }
   }
   function rememberFocus() {
     const focused = document.activeElement;
@@ -66,16 +157,21 @@ if (typeof document !== 'undefined') {
     return {focused, page:currentPage, attribute, value:attribute && owner.getAttribute(attribute),
       index:owner ? [...owner.querySelectorAll('button,input,select,textarea')].indexOf(focused) : -1};
   }
+  function focusAvailable(node) {
+    if (!node?.isConnected || node.disabled || node.closest('[hidden],dialog:not([open])')) return false;
+    const closed = node.closest('details:not([open])');
+    return !closed || closed.querySelector('summary')?.contains(node);
+  }
   function restoreFocus(saved) {
     if (!saved.focused || saved.focused === document.body || currentPage !== saved.page
         || document.activeElement !== document.body || document.querySelector('dialog[open]')) return;
-    if (saved.focused.isConnected && !saved.focused.disabled && !saved.focused.closest('[hidden]')) {
+    if (focusAvailable(saved.focused)) {
       saved.focused.focus({preventScroll:true}); return;
     }
     if (!saved.attribute || saved.index < 0) return;
     const owner = [...$(currentPage).querySelectorAll('[' + saved.attribute + ']')].find(node => node.getAttribute(saved.attribute) === saved.value);
     const control = owner?.querySelectorAll('button,input,select,textarea')[saved.index];
-    if (control && !control.disabled) control.focus({preventScroll:true});
+    if (focusAvailable(control)) control.focus({preventScroll:true});
     else if (!busy) {
       const fallback = owner || $('title'); fallback.tabIndex = -1; fallback.focus({preventScroll:true});
     }
@@ -98,6 +194,23 @@ if (typeof document !== 'undefined') {
     const status = $('status'), previousFocus = document.activeElement;
     status.replaceChildren();
     status.className = 'status' + (error ? ' error' : '');
+    status.setAttribute('role', error ? 'alert' : 'status');
+    status.setAttribute('aria-live', error ? 'assertive' : 'polite');
+    // Native modal dialogs sit above all z-index layers and make the page
+    // inert. Errors must also appear inside the active dialog, not behind it.
+    document.querySelectorAll('.dialog-feedback').forEach(note => { note.hidden = true; note.textContent = ''; });
+    const openDialogs = [...document.querySelectorAll('dialog[open]')];
+    const activeDialog = document.activeElement?.closest('dialog[open]') || openDialogs.at(-1);
+    if (message && activeDialog && (error || persistent)) {
+      let note = activeDialog.querySelector('.dialog-feedback');
+      if (!note) {
+        note = element('p', 'dialog-feedback');
+        const heading = activeDialog.querySelector('h2');
+        if (heading) heading.after(note); else activeDialog.prepend(note);
+      }
+      note.textContent = message; note.hidden = false; note.classList.toggle('error', error);
+      note.setAttribute('role', error ? 'alert' : 'status');
+    }
     if (!message) return;
     const dismiss = element('button', 'dismiss-notice', '×');
     dismiss.type = 'button'; dismiss.setAttribute('aria-label', 'Bildirimi kapat');
@@ -111,7 +224,10 @@ if (typeof document !== 'undefined') {
         target.focus({preventScroll:true});
       }
     };
-    status.append(element('span', 'status-message', message), dismiss);
+    const statusIcon = element('span', 'status-icon');
+    statusIcon.append(icon(error ? 'alert' : persistent ? 'dots' : 'check'));
+    statusIcon.setAttribute('aria-hidden', 'true');
+    status.append(statusIcon, element('span', 'status-message', message), dismiss);
     if (!persistent && !error) noticeTimer = setTimeout(() => {
       if (!status.contains(document.activeElement)) status.replaceChildren();
     }, 6000);
@@ -120,9 +236,12 @@ if (typeof document !== 'undefined') {
     document.querySelectorAll('[data-api]').forEach(e => e.disabled = busy || !api);
     document.querySelectorAll('#modForm input,#modForm textarea,#modForm select,#resetForm').forEach(e => e.disabled = busy);
     $('publishMod').disabled = busy || !api || !!sourceId;
+    $('modForm').querySelector('[type="submit"]').disabled = busy || !api || !selectedFile;
+    $('choose').textContent = selectedFile ? 'Dosyayı değiştir' : 'Dosya seç';
     $('showCurrentGuide').disabled = busy || !api || !state.preferences?.mobalytics_enabled || !state.guide?.pick;
     $('showManualGuide').disabled = busy || !api || !state.preferences?.mobalytics_enabled;
     $('main').setAttribute('aria-busy', String(busy));
+    document.body.classList.toggle('is-busy', busy);
     renderBulk();
     $('clearDownloads').disabled = busy || !api || !(state.downloads?.jobs || []).some(j => !['queued', 'downloading', 'installing'].includes(j.status));
     renderBanPriority();
@@ -137,14 +256,27 @@ if (typeof document !== 'undefined') {
     const e = element('div', 'empty');
     e.append(element('div', 'symbol', '◇'), element('h2', '', title), element('p', '', description));
     e.append(button(filtered ? 'Filtreleri temizle' : 'Mod ekle', () => {
-      if (filtered) { ['search', 'installedSearch', 'categoryFilter', 'installedCategory'].forEach(id => $(id).value = ''); $('favoritesOnly').checked = false; $('installedFilter').value = 'all'; $('installedCategory').value = ''; render(); }
+      if (filtered) {
+        if (target.id === 'catalogGrid') { $('search').value = ''; $('categoryFilter').value = ''; $('favoritesOnly').checked = false; }
+        else { $('installedSearch').value = ''; $('installedCategory').value = ''; $('installedFilter').value = 'all'; }
+        render();
+      }
       else page('publish');
     })); target.append(e);
   }
   async function reload(refresh = false, background = false) {
     const request = ++snapshotRequest, epoch = stateEpoch;
-    const value = await api.snapshot(refresh);
+    let value;
+    try {
+      value = await readBridge(api.snapshot(refresh));
+      if (!value || typeof value.installed !== 'object' || !Array.isArray(value.catalog) || !value.settings) {
+        throw new Error('Kütüphane bilgileri okunamadı. Bağlantıyı yeniden dene.');
+      }
+    }
+    catch (error) { setConnection(false); throw error; }
     if (request !== snapshotRequest || (background && (busy || epoch !== stateEpoch))) return false;
+    setConnection(true); initialized = true; $('loadingBanner').hidden = true;
+    document.body.classList.remove('initializing');
     state = value;
     render();
     return true;
@@ -158,11 +290,12 @@ if (typeof document !== 'undefined') {
       const result = await fn();
       if (!result || !result.ok) throw new Error(result?.error || 'İşlem tamamlanamadı.');
       success = true;
+      let stale = false;
       if (refresh) {
         try { await reload(); }
-        catch (_) { notify('İşlem tamamlandı, ancak liste yenilenemedi. Kütüphaneyi yenile.', true); return true; }
+        catch (_) { stale = true; }
       }
-      notify(message);
+      notify(stale ? 'İşlem tamamlandı, ancak liste yenilenemedi. Bağlantıyı yeniden dene; işlemi tekrar yapmana gerek yok.' : message, stale);
       if (after) after(result.result);
     } catch (e) {
       $('autoAccept').checked = !!state.settings.auto_accept;
@@ -200,7 +333,8 @@ if (typeof document !== 'undefined') {
   }
   function favorite(mod) {
     const marked = (state.settings.favorites || []).includes(mod.id);
-    const b = button(marked ? '★' : '☆', () => act(() => api.favorite(mod.id, !marked), marked ? 'Favorilerden çıkarıldı.' : 'Favorilere eklendi.'), {remote: true});
+    const b = button('', () => act(() => api.favorite(mod.id, !marked), marked ? 'Favorilerden çıkarıldı.' : 'Favorilere eklendi.'), {remote: true});
+    b.append(icon('star'));
     b.className = 'favorite' + (marked ? ' selected' : '');
     b.setAttribute('aria-label', mod.name + (marked ? ' favorilerden çıkar' : ' favorilere ekle'));
     b.setAttribute('aria-pressed', String(marked));
@@ -271,6 +405,8 @@ if (typeof document !== 'undefined') {
     if (busy) return;
     act(() => api.prepare_import(mod.id), 'İndirdiğin mod dosyasını seç.', {refresh: false, after: () => {
       sourceId = mod.id;
+      selectedFile = false; document.querySelector('.file-picker').classList.remove('selected');
+      $('importError').hidden = true;
       const form = $('modForm'); form.reset();
       for (const key of ['id', 'name', 'champion', 'champion_id', 'version', 'description', 'category']) form.elements.namedItem(key).value = mod[key] ?? '';
       $('importSource').textContent = mod.name + ' · ' + mod.author + ' · ' + mod.license;
@@ -280,9 +416,11 @@ if (typeof document !== 'undefined') {
   }
   function previewFor(mod) {
     const cached = coverCache.get(mod.id);
-    return mod.preview_data || state.installed[mod.id]?.preview_data
-      || (cached?.key === state.installed[mod.id]?.cover_key ? cached?.data : null)
-      || mod.image_url || boot.sources.find(source => source.id === mod.id)?.image_url;
+    const local = mod.preview_data || state.installed[mod.id]?.preview_data
+      || (cached?.key === state.installed[mod.id]?.cover_key ? cached?.data : null);
+    if (local?.startsWith('data:')) return local;
+    if (state.preferences?.data_saver === true) return null;
+    return local || mod.image_url || boot.sources.find(source => source.id === mod.id)?.image_url;
   }
   async function loadVisibleCovers() {
     if (!api?.cover_previews) return;
@@ -317,12 +455,14 @@ if (typeof document !== 'undefined') {
   }
   function card(mod, local = false) {
     const category = mod.category || 'skins', source = !!mod.source_url && !local;
-    const e = element('article', 'card');
+    const e = element('article', 'card' + (local && mod.enabled ? ' is-enabled' : ''));
     e.dataset.modId = mod.id;
     const art = element('div', 'art art-' + category);
     art.dataset.previewId = mod.id;
-    const monogram = category === 'skins' ? (mod.champion || mod.name).slice(0, 2).toUpperCase() : ({ui: 'HUD', fonts: 'Aa', maps: 'MAP', announcers: 'VO'}[category] || 'MOD');
-    art.append(element('span', 'art-letter', monogram));
+    const fallback = element('span', 'art-letter'); fallback.setAttribute('aria-hidden', 'true');
+    fallback.append(icon(category === 'skins' ? 'crest' : category === 'ui' ? 'hud' : categoryIcons[category] || 'layers')); art.append(fallback);
+    const categoryMark = element('span', 'art-category'); categoryMark.setAttribute('aria-hidden', 'true');
+    categoryMark.append(icon(categoryIcons[category] || 'layers'), element('span', '', categories[category])); art.append(categoryMark);
     const preview = previewFor(mod);
     if (preview) {
       const img = element('img'); img.src = preview; img.alt = mod.name; img.loading = 'lazy'; img.referrerPolicy = 'no-referrer';
@@ -337,7 +477,8 @@ if (typeof document !== 'undefined') {
       check.onchange = () => { if (check.checked) selectedMods.add(mod.id); else selectedMods.delete(mod.id); e.classList.toggle('bulk-selected', check.checked); renderBulk(); };
       label.append(check); art.append(label);
     }
-    const badge = element('span', 'badge' + (local && mod.enabled ? ' enabled' : ''), local ? (mod.enabled ? 'Etkin' : 'Kapalı') : (source ? (state.installed[mod.id] ? 'Yüklü · RuneForge' : 'RuneForge') : 'OKDEV kataloğu'));
+    const missing = local && mod.files_available === false;
+    const badge = element('span', 'badge' + (missing ? ' missing' : local && mod.enabled ? ' enabled' : ''), missing ? 'Dosyaları eksik' : local ? (mod.enabled ? 'Etkin' : 'Kapalı') : (source ? (state.installed[mod.id] ? 'Yüklü · RuneForge' : 'RuneForge') : 'OKDEV kataloğu'));
     const subtitle = [categories[category], mod.champion, 'v' + mod.version].filter(Boolean).join(' · ');
     const actions = element('div', 'actions');
     if (local) {
@@ -361,11 +502,13 @@ if (typeof document !== 'undefined') {
     e.append(actions); return e;
   }
   function showDetail(mod, local = false) {
-    const target = $('detailContent'); target.replaceChildren();
-    const art = element('div', 'detail-art', (mod.champion || mod.name).slice(0, 2).toUpperCase());
+    const content = $('detailContent'); content.replaceChildren();
+    const target = element('div', 'detail-body'); content.append(target);
+    const art = element('div', 'detail-art');
+    art.append(icon((mod.category || 'skins') === 'skins' ? 'crest' : categoryIcons[mod.category] || 'layers'));
     art.dataset.previewId = mod.id;
     const preview = previewFor(mod);
-    if (preview) { const img = element('img'); img.src = preview; img.alt = mod.name; img.referrerPolicy = 'no-referrer'; img.onerror = () => { art.textContent = (mod.champion || mod.name).slice(0, 2).toUpperCase(); }; art.replaceChildren(img); }
+    if (preview) { const img = element('img'); img.src = preview; img.alt = mod.name; img.referrerPolicy = 'no-referrer'; img.onerror = () => img.remove(); art.append(img); }
     target.append(art, element('span', 'badge', categories[mod.category || 'skins']), element('h2', '', mod.name), element('div', 'mod-meta', [mod.champion, 'v' + mod.version].filter(Boolean).join(' · ')), element('p', '', mod.description || 'Bu paket için açıklama eklenmemiş.'));
     target.querySelector('h2').id = 'detailTitle';
     $('detailDialog').setAttribute('aria-labelledby', 'detailTitle');
@@ -380,7 +523,8 @@ if (typeof document !== 'undefined') {
       }
       if (mod.enabled || mod.files_available !== false) actions.append(button(mod.enabled ? 'Modu kapat' : 'Etkinleştir', () => { $('detailDialog').close(); requestSelection([mod.id], mod.enabled ? 'disable' : 'enable', false); }, {primary: true, remote: true}));
       if (boot.sources.some(source => source.id === mod.id)) actions.append(button('Kaynak sayfası ↗', () => act(() => api.open_source(mod.id), 'Özgün kaynak sayfası açıldı.', {refresh: false}), {remote: true}));
-      actions.append(button('Modu kaldır', () => { $('detailDialog').close(); removeId = mod.id; $('removeDescription').textContent = mod.name + ' kütüphanenden kaldırılacak.'; $('removeDialog').showModal(); }, {remote: true}));
+      const remove = button('Modu kaldır', () => { $('detailDialog').close(); removeId = mod.id; $('removeDescription').textContent = mod.name + ' kütüphanenden kaldırılacak.'; $('removeDialog').showModal(); }, {remote: true});
+      remove.classList.add('danger'); actions.append(remove);
     } else if (mod.source_url) {
       const saved = state.installed[mod.id], available = !!mod.download_url && (!saved || saved.sha256 !== mod.sha256 || saved.files_available === false);
       target.append(element('div', 'help-note', mod.download_url ? 'Paket RuneForge’un özgün sunucusundan indirilir ve dosya bütünlüğü doğrulanır. ' + (mod.download_size / 1048576).toFixed(1) + ' MB' + (saved && available ? ' · Mevcut kopyan yedeklenir.' : '') : '1. Özgün sayfadan paketi indir. 2. İndirdiğin dosyayı aşağıdaki düğmeyle kütüphanene ekle.'));
@@ -392,37 +536,60 @@ if (typeof document !== 'undefined') {
       if (saved && !HubView.newer(mod.version, saved.version)) actions.append(button('Modlarımda göster', () => { $('detailDialog').close(); $('installedSearch').value=saved.name; $('installedFilter').value='all'; $('installedCategory').value=''; page('installed'); render(); }, {primary: true}));
       else actions.append(button(saved ? 'Güncelle' : 'İndir', () => { $('detailDialog').close(); download(mod); }, {primary: true, remote: true}));
     }
-    target.append(actions); $('detailDialog').showModal(); loadVisibleCovers();
+    content.append(actions); $('detailDialog').showModal(); loadVisibleCovers();
   }
-  let banListSignature = '';
+  const laneNames = {top:'Üst koridor',jungle:'Orman',mid:'Orta koridor',adc:'Alt koridor',support:'Destek'};
+  const listSignatures = {};
+  function draftProfiles() {
+    return Object.fromEntries(Object.keys(laneNames).map(lane => [lane, {
+      pick:[...(state.preferences.lane_profiles?.[lane]?.pick || [])],
+      ban:[...(state.preferences.lane_profiles?.[lane]?.ban || [])]
+    }]));
+  }
+  function draftList(kind) {
+    const lane = $('draftLane').value;
+    return lane === 'general' ? (kind === 'ban' ? state.preferences.auto_ban_priority || [] : []) : draftProfiles()[lane][kind];
+  }
+  function saveDraftList(kind, next) {
+    const lane = $('draftLane').value, profiles = draftProfiles();
+    const changes = lane === 'general' ? {auto_ban_priority:next} : {lane_profiles:profiles};
+    if (lane !== 'general') profiles[lane][kind] = next;
+    const bans = state.preferences.lane_automation ? Object.values(profiles).some(p=>p.ban.length) : (changes.auto_ban_priority || state.preferences.auto_ban_priority || []).length;
+    if (!bans) changes.auto_ban_enabled = false;
+    if (!Object.values(profiles).some(p=>p.pick.length)) changes.auto_pick_enabled = false;
+    return act(() => api.save_preferences(changes), 'Öncelik listesi kaydedildi.');
+  }
   function renderBanPriority() {
-    const ids = state.preferences.auto_ban_priority || [];
-    const signature = JSON.stringify(ids);
-    $('autoBanEnabled').disabled = busy || !api || !ids.length;
-    $('addBanChampion').disabled = busy || !api || ids.length >= 10;
-    document.querySelectorAll('#banPriority button').forEach(control => { control.disabled = busy || !api || control.dataset.boundary === 'true'; });
-    if (signature === banListSignature) return;
-    banListSignature = signature;
-    $('banPriority').replaceChildren();
-    const save = next => act(() => api.save_preferences({auto_ban_priority:next, ...(next.length ? {} : {auto_ban_enabled:false})}), 'Ban listesi kaydedildi.');
-    ids.forEach((id, index) => {
-      const champion = boot.champions.find(c => c.id === id);
-      const name = champion ? champion.name : String(id);
-      const row = element('li', 'ban-row');
-      row.append(element('span', '', name));
-      const actions = element('div', 'ban-actions');
-      for (const [label, delta] of [['Yukarı', -1], ['Aşağı', 1]]) {
-        const control = button(label, () => { const next = [...ids]; [next[index], next[index + delta]] = [next[index + delta], next[index]]; save(next); });
-        control.setAttribute('aria-label', name + ' ' + label.toLocaleLowerCase('tr'));
-        control.disabled = index + delta < 0 || index + delta >= ids.length;
-        control.dataset.boundary = String(control.disabled);
-        actions.append(control);
-      }
-      const remove = button('Kaldır', () => save(ids.filter(c => c !== id)));
-      remove.setAttribute('aria-label', name + ' kaldır');
-      actions.append(remove); row.append(actions); $('banPriority').append(row);
-    });
-    $('banListStatus').textContent = ids.length ? 'Yukarıdaki şampiyonlara öncelik verilir.' : 'Başlamak için bir şampiyon ekle. Otomatik ban kapalı.';
+    const profiles = draftProfiles(), lane = $('draftLane').value;
+    const bans = state.preferences.lane_automation ? Object.values(profiles).some(p=>p.ban.length) : (state.preferences.auto_ban_priority || []).length;
+    $('autoBanEnabled').disabled = busy || !api || !bans;
+    $('autoPickEnabled').disabled = busy || !api || !Object.values(profiles).some(p=>p.pick.length);
+    $('lanePickEditor').hidden = lane === 'general';
+    $('draftRoleStatus').textContent = laneNames[state.guide?.lane] ? 'Atanan koridor: ' + laneNames[state.guide.lane] : 'Atanan koridor bekleniyor. Koridor bilinmiyorsa koridora göre işlem yapılmaz.';
+    for (const kind of ['ban','pick']) {
+      const ids = draftList(kind), prefix = kind === 'ban' ? 'Ban' : 'Pick';
+      $('add' + prefix + 'Champion').disabled = busy || !api || ids.length >= 10 || (kind === 'pick' && lane === 'general');
+      document.querySelectorAll('#' + kind + 'Priority button').forEach(c=>{c.disabled=busy||!api||c.dataset.boundary==='true';});
+      const signature = JSON.stringify([lane,ids]);
+      if (signature === listSignatures[kind]) continue;
+      listSignatures[kind] = signature;
+      $(kind + 'Priority').replaceChildren();
+      ids.forEach((id,index)=>{
+        const name=boot.champions.find(c=>c.id===id)?.name || String(id);
+        const row=element('li','ban-row');row.append(element('span','',name));
+        const actions=element('div','ban-actions');
+        for(const [label,delta] of [['Yukarı',-1],['Aşağı',1]]) {
+          const control=button(label,()=>{const next=[...ids];[next[index],next[index+delta]]=[next[index+delta],next[index]];saveDraftList(kind,next);});
+          control.setAttribute('aria-label',name+' '+label.toLocaleLowerCase('tr'));
+          control.dataset.boundary=String(index+delta<0||index+delta>=ids.length);
+          control.disabled=busy||!api||control.dataset.boundary==='true';actions.append(control);
+        }
+        const remove=button('Kaldır',()=>saveDraftList(kind,ids.filter(c=>c!==id)));
+        remove.setAttribute('aria-label',name+' kaldır');remove.disabled=busy||!api;
+        actions.append(remove);row.append(actions);$(kind+'Priority').append(row);
+      });
+      $(kind+'ListStatus').textContent=ids.length?'İlk uygun şampiyon kullanılır. En fazla 10 şampiyon.':'Bu liste boş; bu listeyle otomatik işlem yapılmaz.';
+    }
   }
   function applyPreferences() {
     const prefs = state.preferences || {};
@@ -430,6 +597,11 @@ if (typeof document !== 'undefined') {
     document.documentElement.dataset.theme = theme === 'system' ? (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark') : theme;
     document.body.classList.toggle('compact', !!prefs.compact_cards);
     document.body.classList.toggle('reduce-motion', !!prefs.reduce_motion);
+    const view = prefs.mod_view === 'list' ? 'list' : 'grid';
+    ['catalogGrid', 'installedGrid'].forEach(id => $(id).classList.toggle('list-view', view === 'list'));
+    document.querySelectorAll('[data-view-mode]').forEach(b => {
+      b.setAttribute('aria-pressed', String(b.dataset.viewMode === view)); b.disabled = busy || !api;
+    });
     document.querySelectorAll('[data-pref]').forEach(control => {
       const value = prefs[control.dataset.pref];
       if (control.type === 'checkbox') control.checked = !!value;
@@ -458,23 +630,33 @@ if (typeof document !== 'undefined') {
     const visible = new Set([...document.querySelectorAll('#installedGrid [data-mod-id]')].map(card => card.dataset.modId));
     const outside = [...selectedMods].filter(id => !visible.has(id)).length;
     $('bulkCount').textContent = selectedMods.size ? selectedMods.size + ' mod seçildi' + (outside ? ' · ' + outside + ' seçim bu görünümün dışında' : '') : 'Birden fazla modu birlikte yönet';
+    $('bulkToolbar').classList.toggle('has-selection', selectedMods.size > 0);
+    const bulkHadFocus = $('bulkToolbar').contains(document.activeElement);
+    $('bulkToolbar').hidden = selectedMods.size === 0;
+    if (bulkHadFocus && $('bulkToolbar').hidden) $('selectionMenu').querySelector('summary').focus({preventScroll:true});
+    $('selectVisible').disabled = busy || !api || !visible.size;
     ['bulkEnable', 'bulkDisable', 'clearBulk'].forEach(id => $(id).disabled = busy || !api || !selectedMods.size);
     $('disableAll').disabled = busy || !api || !Object.values(state.installed).some(m => m.enabled);
     $('undoSelection').disabled = busy || !api || !state.selection_undo?.available;
     $('undoSelection').hidden = !state.selection_undo?.available;
   }
-  async function requestSelection(ids, mode, alwaysConfirm = true) {
+  function applyPlan(plan) {
+    return Object.keys(plan.targets || {}).length
+      ? api.apply_selection(plan.requested, plan.mode, plan.revision, plan.targets)
+      : api.apply_selection(plan.requested, plan.mode, plan.revision);
+  }
+  async function requestSelection(ids, mode, alwaysConfirm = true, targets = null) {
     if (!api?.preview_selection) {
       if (ids.length === 1) return act(() => api.enable(ids[0], mode === 'enable'), 'Mod seçimi kaydedildi.');
       return;
     }
     let plan = null;
-    const ok = await act(() => api.preview_selection(ids, mode), '', {refresh:false, after: value => { plan = value; }});
+    const ok = await act(() => targets ? api.preview_selection(ids, mode, targets) : api.preview_selection(ids, mode), '', {refresh:false, after: value => { plan = value; }});
     if (!ok || !plan) return;
     if (!plan.changed) { notify('Seçimlerin zaten bu durumda.'); return; }
     const replaced = mode === 'enable' && plan.disable.length > 0;
     if (!alwaysConfirm && !replaced) {
-      return act(() => api.apply_selection(plan.requested, plan.mode, plan.revision), 'Seçim kaydedildi. İstersen geri alabilirsin.');
+      return act(() => applyPlan(plan), 'Seçim kaydedildi. İstersen geri alabilirsin.');
     }
     const dialog = $('selectionDialog'); dialog._plan = plan;
     $('selectionTitle').textContent = replaced ? 'Etkin mod değiştirilsin mi?' : 'Mod seçimlerini uygula';
@@ -484,10 +666,27 @@ if (typeof document !== 'undefined') {
       const block = element('div', 'selection-change ' + className); block.append(element('h3', '', label + ' · ' + mods.length));
       const list = element('ul'); mods.forEach(mod => list.append(element('li', '', mod.name))); block.append(list); detail.append(block);
     }
+    for (const mod of plan.target_changes || []) detail.append(element('p', '', mod.name + ' · Hedef kostüm: ' + mod.skin_id));
     dialog.showModal();
   }
   function renderHome(locals) {
     $('navInstalled').textContent = locals.length;
+    const selected=locals.filter(mod=>mod.enabled), missing=selected.filter(mod=>mod.files_available===false);
+    $('loadoutTitle').textContent=missing.length?'Seçimlerinde eksik dosya var':selected.length?'Seçimlerin kaydedildi':'Bir sonraki oyununu hazırla';
+    $('loadoutSummary').textContent=missing.length?missing.length+' modun dosyası bulunamadı. Modlarını kontrol et.':selected.length?
+      selected.length+' etkin mod · Seçimlerin sonraki oyun hazırlanırken kullanılır.':'Kütüphanenden bir mod etkinleştir veya hazır bir profil uygula.';
+    $('loadoutState').textContent=missing.length?'Kontrol gerekli':selected.length?'Kaydedildi':'Henüz mod seçilmedi';
+    $('loadoutState').className='loadout-state'+(missing.length?' attention':selected.length?' ready':'');
+    const loadout=$('loadoutItems'); loadout.replaceChildren();
+    selected.slice(0,4).forEach(mod=>{
+      const row=button('',()=>showDetail(mod,true)); row.className='loadout-item';
+      const text=element('span'); text.append(element('strong','',mod.name),element('small','',
+        [mod.champion, categories[mod.category||'skins'], mod.files_available===false?'Dosyaları eksik':'Etkin'].filter(Boolean).join(' · ')));
+      row.append(element('span','loadout-dot'+(mod.files_available===false?' attention':'')),text); loadout.append(row);
+    });
+    if (!selected.length) loadout.append(element('p','loadout-empty',locals.length?'Modların kütüphanende. Hangilerini kullanacağına sen karar ver.':'İlk modunla başla. Dosyanı ekle, bilgilerini kontrol et ve etkinleştir.'));
+    $('loadoutAction').textContent=!locals.length?'İlk modunu ekle →':selected.length>4?'Tüm '+selected.length+' seçimi gör →':'Modlarımı yönet →';
+    $('loadoutAction').onclick=()=>{page(locals.length?'installed':'publish');};
     const target = $('homeRecent'); target.replaceChildren();
     HubView.filter(locals, {sort: 'recent'}).slice(0, 3).forEach(mod => {
       const item = button('', () => showDetail(mod, true)); item.className = 'recent-item';
@@ -522,6 +721,7 @@ if (typeof document !== 'undefined') {
   }
   function renderProfiles() {
     const target = $('profileCards'); target.replaceChildren();
+    $('profileCount').textContent = Object.keys(state.profiles || {}).length + ' kayıtlı profil';
     Object.entries(state.profiles || {}).forEach(([id, profile]) => {
       const panel = element('article', 'profile-card'); panel.dataset.profileId = id;
       const heading = element('div', 'profile-card-heading');
@@ -529,17 +729,23 @@ if (typeof document !== 'undefined') {
       manage.setAttribute('aria-label', profile.name + ' profilini düzenle');
       heading.append(element('h3', '', profile.name), manage);
       const active = Object.values(state.installed).filter(m => m.enabled).map(m => m.id).sort();
-      const matches = JSON.stringify([...profile.mods].sort()) === JSON.stringify(active);
+      const matches = !profile.missing && JSON.stringify([...profile.mods].sort()) === JSON.stringify(active) &&
+        Object.entries(profile.targets || {}).every(([id, target]) => {
+          const mod = state.installed[id];
+          return mod && (mod.selected_target_skin_id ?? mod.target_skin_ids?.[0] ?? mod.champion_id * 1000) === target;
+        });
       const missing = profile.mods.filter(id => !state.installed[id] || state.installed[id].files_available === false);
+      const missingCount = Math.max(missing.length, profile.missing || 0);
+      panel.classList.toggle('current', matches);
       panel.append(heading, element('span', 'subtle', profile.mods.length + ' kayıtlı seçim' + (matches ? ' · Şu anki seçimlerin' : '')));
-      if (missing.length) panel.append(element('p', 'profile-missing', missing.length + ' mod eksik. Uygulamadan önce modları ekle veya geri yükle.'));
+      if (missingCount) panel.append(element('p', 'profile-missing', missingCount + ' mod eksik veya paket içeriği farklı. Doğru paketleri eklediğinde profil otomatik eşleşir.'));
       const tags = element('div', 'profile-tags');
       profile.mods.slice(0, 6).forEach(modId => tags.append(element('span', '', state.installed[modId]?.name || 'Eksik mod')));
       if (profile.mods.length > 6) tags.append(element('span', '', '+' + (profile.mods.length - 6)));
       if (!profile.mods.length) tags.append(element('span', '', 'Tüm modları kapatan profil'));
       panel.append(tags, button('Bu profili uygula', () => {
-        if (missing.length) { notify('Bu profilde eksik modlar var. Önce modları ekle veya geri yükle.', true); return; }
-        if (api?.preview_selection) requestSelection(profile.mods, 'replace');
+        if (missingCount) { notify('Profilin doğru paketlerini ekle veya geri yükle. Seçimlerin değiştirilmedi.', true); return; }
+        if (api?.preview_selection) requestSelection(profile.mods, 'replace', true, profile.targets || null);
         else act(() => api.apply_profile(id), profile.name + ' uygulandı. Sonraki oyun için hazır.');
       }, {primary: true, remote: true})); target.append(panel);
     });
@@ -562,13 +768,13 @@ if (typeof document !== 'undefined') {
     const cg = $('catalogGrid'); cg.replaceChildren(); filtered.slice(0, catalogLimit).forEach(m => cg.append(card(m)));
     $('moreCatalog').hidden = filtered.length <= catalogLimit;
     $('moreCatalog').textContent = 'Daha fazla göster · ' + Math.max(0, filtered.length - catalogLimit) + ' içerik daha';
-    $('resultCount').textContent = filtered.length + ' / ' + mods.length + ' içerik';
+    $('resultCount').textContent = filtered.length === mods.length ? mods.length + ' içerik' : filtered.length + ' / ' + mods.length + ' içerik';
     if (!filtered.length) empty(cg, 'Bu filtrelerle içerik bulunamadı', 'Aramayı değiştir veya filtreleri temizleyerek tüm içerikleri gör.', true);
     const selected = HubView.filter(locals, {term: $('installedSearch').value, category: $('installedCategory').value, favorites, status: $('installedFilter').value, sort: $('installedSort').value});
     const ig = $('installedGrid'); ig.replaceChildren(); selected.slice(0, installedLimit).forEach(m => ig.append(card(m, true)));
     $('moreInstalled').hidden = selected.length <= installedLimit;
     $('moreInstalled').textContent = 'Daha fazla göster · ' + Math.max(0, selected.length - installedLimit) + ' mod daha';
-    $('installedResults').textContent = selected.length + ' / ' + locals.length + ' mod';
+    $('installedResults').textContent = selected.length === locals.length ? locals.length + ' mod · ' + locals.filter(m => m.enabled).length + ' etkin' : selected.length + ' / ' + locals.length + ' mod';
     if (!selected.length) empty(ig, locals.length ? 'Bu filtrelerle mod bulunamadı' : 'İlk modunu ekle', locals.length ? 'Aramayı veya durum filtresini değiştir.' : 'Kütüphanedeki kaynakları keşfet veya bilgisayarındaki .fantome paketini içe aktar.', !!locals.length);
     let recovery = $('recovery');
     if (!recovery) { recovery = element('details', 'panel recovery'); recovery.id = 'recovery'; $('installed').append(recovery); }
@@ -589,7 +795,7 @@ if (typeof document !== 'undefined') {
     if ((state.removed || []).length > recoveryLimit) recovery.append(button('Daha fazla yedek göster', () => { recoveryLimit += 20; render(); }));
     if (!(state.removed || []).length) recovery.append(element('p', '', 'Bu sürümde kaldırılan modların yedekleri burada görünür.'));
     recovery.open = wasOpen;
-    lock(); loadVisibleCovers(); restoreFocus(focus);
+    renderFilters(); lock(); loadVisibleCovers(); restoreFocus(focus);
   }
   function updateCategory() {
     const skin = $('importCategory').value === 'skins';
@@ -597,13 +803,35 @@ if (typeof document !== 'undefined') {
     $('championName').required = skin; $('championId').required = false;
   }
   document.querySelectorAll('nav button').forEach(b => b.onclick = () => page(b.dataset.page));
-  const profilePanel = element('div', 'panel profile-panel');
+  const profilePanel = element('dialog'); profilePanel.id = 'createProfileDialog';
   profilePanel.append(element('h2', '', 'Yeni profil oluştur'));
   profilePanel.append(element('p', '', 'Şu an etkin olan modlarını bir adla kaydet. Dosyaların kopyalanmaz; yalnızca seçimlerin saklanır.'));
-  const saveRow = element('div', 'profile-row'), nameInput = element('input');
+  const currentSelectionNote = element('p', 'help-note'); currentSelectionNote.id = 'newProfileSummary'; profilePanel.append(currentSelectionNote);
+  const saveRow = element('form', 'profile-row profile-create-form'), nameInput = element('input');
   nameInput.id = 'profileName'; nameInput.maxLength = 50; nameInput.placeholder = 'Örn. Klasik görünüm'; nameInput.setAttribute('aria-label', 'Yeni profil adı');
-  saveRow.append(nameInput, button('Seçimleri kaydet', () => act(() => api.save_profile(nameInput.value), 'Profil kaydedildi.', {after: () => nameInput.value = ''}), {remote: true}));
-  profilePanel.append(saveRow); $('profileHost').append(profilePanel);
+  nameInput.required = true; nameInput.autocomplete = 'off';
+  const profileError = element('p', 'field-error'); profileError.id = 'profileError'; profileError.hidden = true; profileError.setAttribute('role', 'alert'); nameInput.setAttribute('aria-describedby', 'profileError');
+  const saveProfileButton = button('Seçimleri kaydet', null, {primary:true, remote:true}); saveProfileButton.type = 'submit';
+  const nameLabel = element('label', '', 'Profil adı'); nameLabel.htmlFor = 'profileName';
+  saveRow.append(nameLabel, nameInput);
+  saveRow.onsubmit = event => {
+    event.preventDefault(); const name = nameInput.value.trim();
+    if (!name) { profileError.textContent = 'Profiline bir ad ver.'; profileError.hidden = false; nameInput.setAttribute('aria-invalid', 'true'); nameInput.focus(); return; }
+    act(() => api.save_profile(name), 'Profil kaydedildi.', {after: () => { nameInput.value = ''; profilePanel.close(); }});
+  };
+  nameInput.oninput = () => { profileError.hidden = true; nameInput.removeAttribute('aria-invalid'); };
+  const profileFooter = element('div', 'form-footer'); profileFooter.append(button('Vazgeç', () => profilePanel.close()), saveProfileButton);
+  saveRow.append(profileError, profileFooter);
+  profilePanel.append(saveRow); document.body.append(profilePanel);
+  $('profileHost').className = 'profile-toolbar';
+  const newProfile = button('Yeni profil', () => {
+    const active = Object.values(state.installed).filter(mod => mod.enabled);
+    currentSelectionNote.textContent = active.length ? active.length + ' etkin mod kaydedilecek: ' + active.slice(0,3).map(mod=>mod.name).join(', ') + (active.length>3?' ve '+(active.length-3)+' mod daha.':'.') : 'Etkin mod yok. Bu profili uygulamak tüm mod seçimlerini kapatır.';
+    profileError.hidden = true; nameInput.removeAttribute('aria-invalid');
+    profilePanel.showModal(); nameInput.focus();
+  }, {primary:true, remote:true}); newProfile.id = 'newProfile'; newProfile.prepend(icon('plus'));
+  $('profileHost').append(element('span', 'subtle', 'Kayıtlı profiller')); $('profileHost').firstChild.id = 'profileCount';
+  $('profileHost').append(newProfile);
   const portableRow = element('div', 'form-footer');
   portableRow.append(button('Profil dosyası içe aktar', () => act(() => api.choose_profile(), '', {refresh:false, after: preview => {
     if (!preview) return;
@@ -612,8 +840,8 @@ if (typeof document !== 'undefined') {
     const list = $('portableProfileMods'); list.replaceChildren();
     preview.mods.forEach(mod => list.append(element('li', '', mod.name + (mod.available ? (mod.version_differs ? ' · Yüklü sürüm farklı' : ' · Hazır') : ' · Kütüphanende yok'))));
     $('portableProfileDialog').showModal();
-  }}), {remote:true}), element('span', 'subtle', 'Profil dosyaları yalnızca seçimleri içerir; mod paketlerini içermez.'));
-  profilePanel.append(portableRow);
+  }}), {remote:true}));
+  $('profileHost').append(portableRow);
   const profileDialog = element('dialog'); profileDialog.id = 'deleteProfileDialog';
   const profileDescription = element('p'); profileDescription.id = 'deleteProfileName';
   profileDialog.append(element('h2', '', 'Profil silinsin mi?'), profileDescription,
@@ -655,6 +883,19 @@ if (typeof document !== 'undefined') {
   }, {primary:true,remote:true}));
   importReplaceDialog.append(importReplaceTitle, importReplaceSummary, importReplaceNote, importReplaceActions); document.body.append(importReplaceDialog);
   document.querySelectorAll('dialog').forEach(dialog => {
+    const show = dialog.showModal.bind(dialog);
+    dialog.showModal = (...args) => { dialog._focusOrigin = rememberFocus(); return show(...args); };
+    dialog.addEventListener('close', () => {
+      const note = dialog.querySelector('.dialog-feedback'); if (note) { note.hidden = true; note.textContent = ''; }
+      queueMicrotask(() => {
+        if (document.querySelector('dialog[open]')) return;
+        if (document.activeElement !== document.body && focusAvailable(document.activeElement)) return;
+        if (dialog._focusOrigin) restoreFocus(dialog._focusOrigin);
+        if (document.activeElement === document.body || !focusAvailable(document.activeElement)) {
+          $('title').tabIndex = -1; $('title').focus({preventScroll:true});
+        }
+      });
+    });
     const heading = dialog.querySelector('h2');
     if (heading && !dialog.hasAttribute('aria-labelledby')) {
       heading.id ||= dialog.id + 'Title';
@@ -692,18 +933,24 @@ if (typeof document !== 'undefined') {
   $('openActivity').onclick = () => { page('diagnostics'); $('activityDetails').open = true; $('activityDetails').scrollIntoView({block:'start',behavior:'smooth'}); };
   $('cancelPortableProfile').onclick = () => $('portableProfileDialog').close();
   $('confirmPortableProfile').onclick = () => act(() => api.import_profile(), 'Profil eklendi. Uygulamadan önce eksik modları tamamla.', {after: () => { $('portableProfileDialog').close(); page('profiles'); }});
+  function closeSelectionMenu(restore = true) {
+    const menu = $('selectionMenu'), hadFocus = menu.contains(document.activeElement);
+    menu.open = false;
+    if (restore && hadFocus) menu.querySelector('summary').focus({preventScroll:true});
+  }
   $('selectVisible').onclick = () => {
+    closeSelectionMenu();
     document.querySelectorAll('#installedGrid [data-mod-id]').forEach(card => selectedMods.add(card.dataset.modId)); render();
   };
   $('clearBulk').onclick = () => { selectedMods.clear(); render(); };
   $('bulkEnable').onclick = () => requestSelection([...selectedMods], 'enable');
   $('bulkDisable').onclick = () => requestSelection([...selectedMods], 'disable');
-  $('disableAll').onclick = () => requestSelection([], 'replace');
-  $('undoSelection').onclick = () => act(() => api.undo_selection(), 'Önceki mod seçimlerin geri yüklendi.');
+  $('disableAll').onclick = () => { closeSelectionMenu(); requestSelection([], 'replace'); };
+  $('undoSelection').onclick = () => { closeSelectionMenu(); act(() => api.undo_selection(), 'Önceki mod seçimlerin geri yüklendi.'); };
   $('cancelSelection').onclick = () => $('selectionDialog').close();
   $('confirmSelection').onclick = () => {
     const plan = $('selectionDialog')._plan;
-    act(() => api.apply_selection(plan.requested, plan.mode, plan.revision), 'Seçimler kaydedildi. İstersen geri alabilirsin.', {after: () => { $('selectionDialog').close(); selectedMods.clear(); render(); }});
+    act(() => applyPlan(plan), 'Seçimler kaydedildi. İstersen geri alabilirsin.', {after: () => { $('selectionDialog').close(); selectedMods.clear(); render(); }});
   };
   $('clearDownloads').onclick = () => act(() => api.clear_download_history(), 'Tamamlanan kayıtlar temizlendi. Mod dosyaların korundu.');
   $('repairDownloads').onclick = () => act(() => api.repair_download_history(), 'İndirme kaydı onarıldı. Özgün dosya veri klasöründe yedeklendi.');
@@ -713,7 +960,38 @@ if (typeof document !== 'undefined') {
   window.addEventListener('scroll', () => { clearTimeout(coverScrollTimer); coverScrollTimer = setTimeout(loadVisibleCovers, 100); }, {passive:true});
   document.querySelectorAll('[data-go]').forEach(b => b.onclick = () => page(b.dataset.go));
   document.querySelectorAll('[data-category]').forEach(b => b.onclick = () => { $('categoryFilter').value = b.dataset.category; render(); });
-  $('searchShortcut').onclick = () => { page('library'); $('search').focus(); };
+  $('searchShortcut').onclick = openCommand;
+  $('closeCommand').onclick=()=>$('commandDialog').close();
+  $('commandSearch').oninput=renderCommands;
+  $('commandSearch').onkeydown=event=>{
+    if (event.key==='ArrowDown'||event.key==='ArrowUp') {
+      event.preventDefault(); if (!commandEntries.length) return;
+      commandIndex=(commandIndex+(event.key==='ArrowDown'?1:-1)+commandEntries.length)%commandEntries.length; updateCommandFocus();
+    } else if(event.key==='Enter') {event.preventDefault();chooseCommand(commandIndex);}
+  };
+  $('retryConnection').onclick=()=> {
+    if (!initialized) return connectBridge();
+    return act(async()=>{await reload();return {ok:true};},'Bağlantı yenilendi.',{refresh:false});
+  };
+  document.querySelectorAll('[data-view-mode]').forEach(control => { control.dataset.api = ''; control.onclick = () => {
+    act(() => api.save_preferences({mod_view:control.dataset.viewMode}), '', {after:()=>{
+      const match = [...document.querySelectorAll('[data-view-mode]')].find(b => b.dataset.viewMode === control.dataset.viewMode && b.dataset.viewOwner === control.dataset.viewOwner);
+      match?.focus({preventScroll:true});
+    }});
+  }; });
+  document.querySelectorAll('[data-settings-tab]').forEach(tab => {
+    tab.onclick = () => settingTab(tab.dataset.settingsTab);
+    tab.onkeydown = event => {
+      const tabs = [...document.querySelectorAll('[data-settings-tab]')];
+      let index = tabs.indexOf(tab);
+      if (event.key === 'ArrowRight') index = (index + 1) % tabs.length;
+      else if (event.key === 'ArrowLeft') index = (index - 1 + tabs.length) % tabs.length;
+      else if (event.key === 'Home') index = 0;
+      else if (event.key === 'End') index = tabs.length - 1;
+      else return;
+      event.preventDefault(); settingTab(tabs[index].dataset.settingsTab, true);
+    };
+  });
   $('closeDetail').onclick = () => $('detailDialog').close();
   document.querySelectorAll('[data-pref]').forEach(control => control.onchange = () => {
     const value = control.type === 'checkbox' ? control.checked : control.value;
@@ -731,8 +1009,10 @@ if (typeof document !== 'undefined') {
   ['categoryFilter', 'sort', 'favoritesOnly', 'installedCategory', 'installedFilter', 'installedSort'].forEach(id => $(id).onchange = render);
   $('refresh').onclick = () => act(async () => { await reload(true); return {ok: true}; }, 'Kütüphane yenilendi.', {refresh: false});
   $('autoAccept').onchange = () => { const value = $('autoAccept').checked; act(() => api.auto_accept(value), 'Tercihin kaydedildi.'); };
-  $('choose').onclick = () => act(async () => ({ok: true, result: await api.choose_mod()}), 'Dosya seçimi tamamlandı.', {refresh: false, after: result => {
+  $('choose').onclick = () => act(async () => ({ok: true, result: await api.choose_mod()}), '', {refresh: false, after: result => {
     if (!result) return;
+    selectedFile = true; document.querySelector('.file-picker').classList.add('selected');
+    $('importError').hidden = true;
     $('selected').textContent = result.name;
     if (sourceId && result.suggested.version) $('modForm').elements.namedItem('version').value = result.suggested.version;
     if (!sourceId) {
@@ -742,13 +1022,21 @@ if (typeof document !== 'undefined') {
       updateCategory();
     }
     if (result.warning) $('importSource').textContent = result.warning;
+    notify('Dosya seçildi. Bilgileri kontrol edip kütüphanene ekleyebilirsin.');
   }});
-  $('chooseCover').onclick = () => act(async () => ({ok: true, result: await api.choose_cover()}), 'Görsel seçimi tamamlandı.', {refresh: false, after: name => { if (name) $('coverName').textContent = name; }});
+  $('chooseCover').onclick = () => act(async () => ({ok: true, result: await api.choose_cover()}), '', {refresh: false, after: name => { if (name) { $('coverName').textContent = name; notify('Kapak görseli seçildi.'); } }});
   $('resetForm').onclick = () => act(() => api.prepare_import(null), 'Form temizlendi.', {refresh: false, after: () => {
+    selectedFile = false; document.querySelector('.file-picker').classList.remove('selected'); $('importError').hidden = true;
     sourceId = null; $('modForm').reset(); $('selected').textContent = 'Dosya seçilmedi'; $('coverName').textContent = 'İsteğe bağlı'; $('importSource').textContent = ''; updateCategory();
   }});
   $('modForm').onsubmit = async e => {
-    e.preventDefault(); const fields = Object.fromEntries(new FormData(e.target));
+    e.preventDefault();
+    if (!selectedFile) {
+      $('importError').textContent = 'Önce eklemek istediğin .fantome, .zip veya .modpkg dosyasını seç.';
+      $('importError').hidden = false; $('choose').focus(); return;
+    }
+    $('importError').hidden = true;
+    const fields = Object.fromEntries(new FormData(e.target));
     let preview;
     if (api?.preview_import) {
       const valid = await act(() => api.preview_import(fields), '', {refresh:false, after: value => { preview = value; }});
@@ -768,17 +1056,22 @@ if (typeof document !== 'undefined') {
     act(() => api.publish_mod(fields, token), 'Mod yayımlandı. Katalog birkaç dakika içinde yenilenebilir.');
   };
   $('importCategory').onchange = updateCategory;
-  $('addBanChampion').onclick = () => {
-    const champion = boot.champions.find(c => HubView.normalize(c.name) === HubView.normalize($('banChampion').value.trim()));
-    const ids = state.preferences.auto_ban_priority || [];
-    if (!champion || ids.includes(champion.id) || ids.length >= 10) {
-      $('banListStatus').textContent = 'Listede olmayan geçerli bir şampiyon seç (en fazla 10).';
-      return;
-    }
-    act(() => api.save_preferences({auto_ban_priority:[...ids, champion.id]}), 'Şampiyon eklendi.');
-    $('banChampion').value = '';
+  $('draftLane').onchange = () => { $('banChampion').value='';$('pickChampion').value='';renderBanPriority(); };
+  $('laneAutomation').onchange = () => {
+    const enabled=$('laneAutomation').checked;
+    const ready=enabled?Object.values(draftProfiles()).some(p=>p.ban.length):(state.preferences.auto_ban_priority||[]).length;
+    act(()=>api.save_preferences({lane_automation:enabled,...(ready?{}:{auto_ban_enabled:false})}), 'Ban listesi tercihi kaydedildi.');
   };
-  $('banChampion').onkeydown = event => { if (event.key === 'Enter') { event.preventDefault(); $('addBanChampion').click(); } };
+  for(const kind of ['ban','pick']) {
+    const prefix=kind==='ban'?'Ban':'Pick';
+    $('add'+prefix+'Champion').onclick=()=>{
+      const champion=boot.champions.find(c=>HubView.normalize(c.name)===HubView.normalize($(kind+'Champion').value.trim()));
+      const ids=draftList(kind);
+      if(!champion||ids.includes(champion.id)||ids.length>=10) {$(kind+'ListStatus').textContent='Listede olmayan geçerli bir şampiyon seç (en fazla 10).';return;}
+      saveDraftList(kind,[...ids,champion.id]);$(kind+'Champion').value='';
+    };
+    $(kind+'Champion').onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();$('add'+prefix+'Champion').click();}};
+  }
   boot.champions.forEach(c => { const o = element('option'); o.value = c.name; $('championList').append(o); });
   $('championName').oninput = () => {
     const c = boot.champions.find(c => HubView.normalize(c.name) === HubView.normalize($('championName').value));
@@ -788,6 +1081,7 @@ if (typeof document !== 'undefined') {
   $('mobalyticsBrowser').onclick = () => act(() => api.mobalytics(true), 'Mobalytics tarayıcıda açıldı.', {refresh: false});
   $('openData').onclick = () => act(() => api.open_data_folder(), 'Veri klasörü açıldı.', {refresh: false});
   $('appVersion').textContent = 'Sürüm ' + (boot.version || '—') + ' · Windows masaüstü uygulaması';
+  $('releaseTag').textContent=(boot.version||'2.0.0').split('.').slice(0,2).join('.');
   for (const [id, destination] of [['openReleases','releases'], ['openSupport','support'], ['openProject','source']]) {
     $(id).onclick = () => act(() => api.open_project_page(destination), 'Proje sayfası tarayıcıda açıldı.', {refresh:false});
   }
@@ -814,21 +1108,40 @@ if (typeof document !== 'undefined') {
   };
   $('confirmRemove').onclick = () => { const id = removeId; $('removeDialog').close(); act(() => api.remove(id), 'Mod kaldırıldı; dosyalar yerel yedekte saklandı.'); };
   document.addEventListener('keydown', e => {
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k' && !document.querySelector('dialog[open]')) { e.preventDefault(); page('library'); $('search').focus(); }
-    if (e.key === 'Escape') $('status').textContent = '';
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k' && !document.querySelector('dialog[open]')) { e.preventDefault(); openCommand(); }
+    if (e.key === 'Escape') { $('status').textContent = ''; if ($('selectionMenu').open) closeSelectionMenu(); }
   });
-  window.addEventListener('pywebviewready', async () => {
-    api = window.pywebview.api; $('connection').textContent = 'OKDEV ile bağlı';
-    await act(async () => { await reload(); return {ok: true}; }, 'Kütüphane hazır.', {refresh: false});
-  });
+  document.addEventListener('click', event => { if (!$('selectionMenu').contains(event.target)) closeSelectionMenu(false); });
+  async function connectBridge() {
+    if (connecting || busy) return;
+    const available = window.pywebview?.api;
+    if (!available?.snapshot) { setConnection(false); return; }
+    connecting = true; api = available;
+    $('loadingBanner').hidden = false;
+    try { await act(async () => { await reload(); return {ok: true}; }, '', {refresh: false}); }
+    finally { connecting = false; $('loadingBanner').hidden = true; }
+  }
+  window.addEventListener('pywebviewready', connectBridge);
+  setTimeout(() => { if (!initialized && !connecting) setConnection(false); }, 8000);
   let guidePolling = false;
   let downloadPolling = false;
+  setInterval(async()=>{
+    if (!api?.state_revision || busy || syncPolling || document.hidden) return;
+    syncPolling=true;
+    try {
+      const revision=await readBridge(api.state_revision());
+      if (busy) return;
+      if (revision!==state.revision) await reload(false,true);
+      else setConnection(true);
+    } catch (_) { setConnection(false); }
+    finally {syncPolling=false;}
+  },3000);
   setInterval(async () => {
     if (!api?.downloads_status || busy || downloadPolling || document.hidden) return;
     downloadPolling = true;
     const epoch = stateEpoch;
     try {
-      const queue = await api.downloads_status();
+      const queue = await readBridge(api.downloads_status());
       if (busy || epoch !== stateEpoch) return;
       const completedBefore = new Set((state.downloads?.jobs || []).filter(j => j.status === 'completed').map(j => j.id));
       const newlyCompleted = queue.jobs.some(j => j.status === 'completed' && !completedBefore.has(j.id));
@@ -843,7 +1156,7 @@ if (typeof document !== 'undefined') {
     guidePolling = true;
     const epoch = stateEpoch;
     try {
-      const value = await api.guide_state();
+      const value = await readBridge(api.guide_state());
       if (busy || epoch !== stateEpoch) return;
       Object.assign(state, value); applyPreferences(); renderGuide();
     }
@@ -851,4 +1164,5 @@ if (typeof document !== 'undefined') {
     finally { guidePolling = false; }
   }, 2000);
   updateCategory(); render();
+  if (window.pywebview?.api?.snapshot) queueMicrotask(() => { if (!initialized) connectBridge(); });
 }

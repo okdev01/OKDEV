@@ -141,17 +141,27 @@ def _perform_update(dialog: UpdateDialog, dev_mode: bool = False) -> bool:
     """
     updater_log.info("Starting update check sequence.")
     dialog.clear_transfer_text()
-    dialog.set_detail("Checking for updates…")
-    dialog.set_status("Contacting update server…")
+    dialog.set_detail("Güncellemeler kontrol ediliyor…")
+    dialog.set_status("Güncelleme sunucusuna bağlanılıyor…")
     dialog.set_marquee(True)
     dialog.pump_messages()
 
     status_cb, progress_cb = _with_ui_updates(dialog)
+    preparing = False
+
+    def preparation_progress(value):
+        nonlocal preparing
+        if not preparing:
+            preparing = True
+            dialog.clear_transfer_text()
+            dialog.set_detail("Güncelleme paketi hazırlanıyor…")
+        progress_cb(value)
+
     try:
         sequence = UpdateSequence()
         updated = sequence.perform_update(
             status_cb,
-            lambda _: None,
+            preparation_progress,
             bytes_callback=lambda downloaded, total: dialog.update_transfer_progress(downloaded, total),
             dev_mode=dev_mode,
             confirm_callback=lambda remote_version, local_version: _confirm_update(
@@ -163,7 +173,7 @@ def _perform_update(dialog: UpdateDialog, dev_mode: bool = False) -> bool:
         updater_log.info(f"Auto-update completed. Update installed: {updated}")
     except Exception as exc:  # noqa: BLE001
         log.error(f"Auto-update failed: {exc}")
-        dialog.set_status(f"Update failed: {exc}")
+        dialog.set_status(f"Güncelleme tamamlanamadı: {exc}")
         dialog.set_marquee(False)
         dialog.reset_progress()
         dialog.clear_transfer_text()
@@ -172,7 +182,7 @@ def _perform_update(dialog: UpdateDialog, dev_mode: bool = False) -> bool:
         return False
 
     if updated:
-        dialog.set_status("Update installed. Restarting…")
+        dialog.set_status("Güncelleme hazır. OKDEV yeniden başlatılıyor…")
         dialog.set_progress(100)
         dialog.pump_messages()
         time.sleep(1.0)
@@ -240,8 +250,8 @@ def _run_launcher_dialog(dev_mode: bool, test_download_fail: bool) -> None:
                 skin_sequence = SkinSyncSequence()
                 skin_sequence.perform_skin_sync(dialog, test_fail=test_download_fail)
 
-                dialog.set_detail("All checks complete.")
-                dialog.set_status("Launching OKDEV…")
+                dialog.set_detail("Hazırlık tamamlandı")
+                dialog.set_status("OKDEV açılıyor…")
                 dialog.set_progress(100)
                 dialog.pump_messages()
                 time.sleep(0.4)

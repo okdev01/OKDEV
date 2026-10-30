@@ -185,5 +185,15 @@
   "Administrator privileges are required to enable auto-start.": "Cần quyền quản trị viên để bật tự khởi động.",
   "Administrator privileges are required to disable auto-start.": "Cần quyền quản trị viên để tắt tự khởi động.",
   "Failed to enable auto-start: {error}": "Không bật được tự khởi động: {error}",
-  "Failed to disable auto-start: {error}": "Không tắt được tự khởi động: {error}"
+  "Failed to disable auto-start: {error}": "Không tắt được tự khởi động: {error}",
+  "Connection lost. Reopen OKDEV and try again.": "Mất kết nối. Hãy mở lại OKDEV rồi thử lại.",
+  "No response received. Check the connection before saving again.": "Không nhận được phản hồi. Kiểm tra kết nối trước khi lưu lại.",
+  "Mod imported: {name}": "Đã nhập mod: {name}",
+  "Reload list": "Tải lại danh sách",
+  "Operation failed": "Thao tác thất bại",
+  "No response received. Reload the list to check the result.": "Không nhận được phản hồi. Tải lại danh sách để kiểm tra kết quả.",
+  "Game path is valid": "Đường dẫn trò chơi hợp lệ",
+  "Game path is invalid": "Đường dẫn trò chơi không hợp lệ",
+  "Validating game path…": "Đang kiểm tra đường dẫn trò chơi…",
+  "Support": "Hỗ trợ"
 }

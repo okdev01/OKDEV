@@ -22,7 +22,10 @@ MAX_CATALOG_BYTES = 4 * 1024 * 1024
 MAX_SETTINGS_BYTES = 1024 * 1024
 MAX_METADATA_BYTES = 128 * 1024
 CATEGORIES = {'skins': 'Şampiyon', 'ui': 'HUD / Arayüz', 'maps': 'Harita',
-              'fonts': 'Yazı tipi', 'announcers': 'Spiker'}
+              'fonts': 'Yazı tipi', 'announcers': 'Spiker', 'voiceover': 'Seslendirme',
+              'loading_screen': 'Yükleme ekranı', 'vfx': 'Görsel efekt', 'sfx': 'Ses efekti',
+              'others': 'Diğer'}
+MULTI_CATEGORIES = {'voiceover', 'loading_screen', 'vfx', 'sfx', 'others'}
 _lock = threading.RLock()
 _mutation_local = threading.local()
 
@@ -249,11 +252,22 @@ def validate_metadata(item):
     # Apply the same metadata contract to local imports and downloaded entries.
     validate_catalog({'schema': 1, 'mods': [dict(item, sha256='0' * 64,
         url='https://github.com/okdev01/OKDEV/releases/download/local/local.fantome')]})
+    targets = item.get('target_skin_ids')
+    if targets is not None and (not isinstance(targets, list) or
+            any(type(t) is not int or t <= 0 or t // 1000 != item.get('champion_id') for t in targets)):
+        raise ValueError('Modun kostüm hedefleri geçersiz.')
 
 
 def validate_archive(path):
+    path = Path(path)
     if path.stat().st_size > MAX_DOWNLOAD:
         raise ValueError('Mod en fazla 512 MB olabilir')
+    if path.suffix.lower() == '.modpkg':
+        from utils.core.modpkg import ModPackage
+        with ModPackage.open(path) as package:
+            if not package.wad_file_count:
+                raise ValueError('Mod paketinde WAD oyun dosyaları bulunamadı')
+        return
     with zipfile.ZipFile(path) as z:
         _validate_zip(z)
 
@@ -274,7 +288,11 @@ def _validate_zip(z):
         ritobin = name.suffix.lower() == '.py' and _is_ritobin_source(z, entry, members)
         if name.suffix.lower() in {'.exe', '.dll', '.ps1', '.bat', '.cmd', '.js', '.py', '.vbs', '.lnk'} and not ritobin:
             raise ValueError('Mod yalnızca oyun verisi içerebilir')
-        if entry.filename.lower().startswith('wad/') and not entry.is_dir():
+        # Both packed WADs and loose WAD directories are valid. A README under
+        # a folder named WAD is not an injectable game payload.
+        if (len(name.parts) >= 2 and name.parts[0].casefold() == 'wad'
+                and name.parts[1].casefold().endswith(('.wad.client', '.wad'))
+                and not entry.is_dir()):
             has_wad = True
     if not has_wad:
         raise ValueError('Mod paketinde WAD oyun dosyaları bulunamadı')
@@ -351,11 +369,13 @@ def import_revision(item):
     return hashlib.sha256(json.dumps(item or None, sort_keys=True, ensure_ascii=True).encode('utf-8')).hexdigest()
 
 
-def import_archive(path, item, expected_revision=None):
+def import_archive(path, item, expected_revision=None, *, storage=None, client_targets=None, client_format=False):
     from injection.mods.storage import ModStorageService
     path = Path(path)
     validate_metadata(item)
     validate_archive(path)
+    from utils.core.junction import archive_digest
+    package_sha256 = archive_digest(path)
     with mutation_lock():
         data = installed(strict=True)
         previous = data.get(item['id'], {})
@@ -363,25 +383,43 @@ def import_archive(path, item, expected_revision=None):
             raise ValueError('Bu mod önizlemeden sonra değişti. Güncel sürümü kontrol edip yeniden ekle.')
         if previous and (previous.get('champion_id') != item.get('champion_id') or previous.get('category', 'skins') != item.get('category', 'skins')):
             raise ValueError('Bu mod kimliği başka bir şampiyona ait. Farklı bir mod kimliği seçin.')
-        service = ModStorageService()
+        service = storage or ModStorageService()
+        if service.mods_root.resolve() != (get_user_data_dir() / 'mods').resolve():
+            raise ValueError('Mod deposu ile kütüphane konumu uyuşmuyor.')
         category = item.get('category', 'skins')
-        if category == 'skins':
-            folder, _, name = service.import_mod_file(item['champion_id'], path, [item['champion_id'] * 1000])
-        else:
-            folder, name = service.import_category_mod_file(category, path)
+        parent = service.get_champion_dir(item['champion_id']) if category == 'skins' else service.mods_root / category
+        name, folder = service._choose_archive_destination(parent, path, path.stem.strip())
+        targets = client_targets or item.get('target_skin_ids') or ([item['champion_id'] * 1000] if category == 'skins' else [])
+        if category == 'skins' and (not isinstance(targets, (list, tuple)) or not targets or
+                any(type(t) is not int or t // 1000 != item['champion_id'] for t in targets)):
+            raise ValueError('Mod hedefleri seçilen şampiyona ait olmalı.')
         item = dict(item, relative_path=folder.relative_to(service.mods_root).as_posix(),
-                    folder_name=name, enabled=previous.get('enabled', False), installed_at=int(time.time()))
+                    folder_name=name, enabled=previous.get('enabled', False), installed_at=int(time.time()),
+                    target_skin_ids=list(targets), package_sha256=package_sha256)
+        if previous.get('selected_target_skin_id') in targets:
+            item['selected_target_skin_id'] = previous['selected_target_skin_id']
         import uuid
         from .covers import save_from_archive
         cover_key = uuid.uuid4().hex
-        item['cover_key'] = cover_key if save_from_archive(path, cover_key) else None
+        item['cover_key'] = None
         backup = None
         if previous:
             backup = _stage_backup(previous, 'update', move=False)
         from . import transactions
         transaction = transactions.begin('import', previous, item, backup)
-        data[item['id']] = item
         try:
+            if category == 'skins':
+                service.import_mod_file(item['champion_id'], path, targets, destination=(name, folder))
+            else:
+                service.import_category_mod_file(category, path, destination=(name, folder))
+            if archive_digest(path) != package_sha256:
+                raise ValueError('Mod dosyası içe aktarılırken değişti. Yeniden ekle.')
+            if path.suffix.lower() != '.modpkg' and save_from_archive(path, cover_key):
+                item['cover_key'] = cover_key
+                journal = load_json(transaction, MAX_METADATA_BYTES)
+                journal['after'] = item
+                write_json(transaction, journal)
+            data[item['id']] = item
             if backup:
                 mod_folder(previous).rename(backup / 'mod')
             if previous:
@@ -397,6 +435,50 @@ def import_archive(path, item, expected_revision=None):
         transactions.finish(transaction)
         record('update' if previous else 'import', item['name'])
         return item
+
+
+def import_client_archive(storage, path, *, champion_id=None, category='skins', targets=None):
+    """The client and desktop commit imports through the same journal/index."""
+    import uuid
+    item = {'id': 'local-' + uuid.uuid4().hex, 'name': Path(path).stem[:100],
+            'description': '', 'version': '1.0.0', 'category': category,
+            'champion_id': int(champion_id) if category == 'skins' else None,
+            'champion': str(champion_id) if category == 'skins' else ''}
+    return import_archive(path, item, storage=storage, client_targets=targets, client_format=True)
+
+
+def remove_client_mod(storage, *, champion_id=None, category='skins', mod_name=None, relative_path=None):
+    """Use recoverable removal even for client mods imported before the Hub."""
+    with mutation_lock():
+        if storage.mods_root.resolve() != (get_user_data_dir() / 'mods').resolve():
+            raise ValueError('Mod deposu ile kütüphane konumu uyuşmuyor.')
+        base = storage.get_champion_dir(champion_id) if category == 'skins' else storage.mods_root / category
+        relative = relative_path or (base.relative_to(storage.mods_root) / str(mod_name)).as_posix()
+        target = storage._resolve_mod_path(base, relative)
+        from utils.core.safe_extract import MOD_ARCHIVE_SUFFIXES
+        if not storage._is_direct_mod_entry(base, target) or not (target.is_dir() or target.is_file() and target.suffix.lower() in MOD_ARCHIVE_SUFFIXES):
+            return False
+        relative = target.relative_to(storage.mods_root.resolve()).as_posix()
+        data = installed(strict=True)
+        item = next((m for m in data.values() if mod_folder(m) == target), None)
+        if item is None:
+            # Adopt a legacy entry before removal so recovery has a stable ID.
+            targets = []
+            if category == 'skins':
+                entry = next((e for e in storage.list_mods_for_champion(champion_id) if e.path.resolve() == target), None)
+                targets = list(entry.target_skin_ids) if entry else [int(champion_id) * 1000]
+            item = {'id': 'local-' + hashlib.sha256(relative.encode()).hexdigest()[:32],
+                    'name': target.name[:100], 'version': '1.0.0', 'description': '',
+                    'champion': str(champion_id) if category == 'skins' else '',
+                    'champion_id': int(champion_id) if category == 'skins' else None,
+                    'category': category, 'folder_name': target.name, 'relative_path': relative,
+                    'enabled': False, 'installed_at': int(time.time()), 'target_skin_ids': targets}
+            validate_metadata(item)
+            data[item['id']] = item
+            write_json(root() / 'installed.json', data)
+        remove(item['id'])
+        storage._champion_listing_cache.clear()
+        return True
 
 
 def download(mod_id, progress=None, cancelled=None):
@@ -469,10 +551,10 @@ def enable(mod_id, enabled):
         selected = data[mod_id]
         category = selected.get('category', 'skins')
         if enabled:
-            if not mod_folder(data[mod_id]).is_dir():
+            if not mod_available(data[mod_id]):
                 raise ValueError('Mod dosyaları bulunamadı. Modu yeniden içe aktarın veya indirin.')
             for item in data.values():
-                if item.get('category', 'skins') == category and (category != 'skins' or item['champion_id'] == selected['champion_id']):
+                if category not in MULTI_CATEGORIES and item.get('category', 'skins') == category and (category != 'skins' or item['champion_id'] == selected['champion_id']):
                     if item['enabled'] and item['id'] != mod_id:
                         _clear_history(item)
                     item['enabled'] = False
@@ -502,6 +584,18 @@ def mod_folder(item):
 
 
 def _clear_history(item):
+    from utils.core.history_store import history_lock
+    with history_lock(get_user_data_dir()):
+        _clear_history_locked(item)
+
+
+def mod_available(item):
+    from utils.core.safe_extract import MOD_ARCHIVE_SUFFIXES
+    path = mod_folder(item)
+    return path.is_dir() or path.is_file() and path.suffix.lower() in MOD_ARCHIVE_SUFFIXES
+
+
+def _clear_history_locked(item):
     if item.get('category', 'skins') != 'skins':
         from utils.core.mod_historic import get_historic_mod, write_historic_mod, clear_historic_mod
         key = {'maps': 'map', 'fonts': 'font', 'announcers': 'announcer'}.get(item['category'], item['category'])
@@ -565,7 +659,7 @@ def removed():
             mod_folder(item)
             if type(record.get('removed_at')) is not int:
                 continue
-            if not (path.parent / 'mod').is_dir() or not re.fullmatch('[a-f0-9]{32}', path.parent.name):
+            if not (path.parent / 'mod').exists() or not re.fullmatch('[a-f0-9]{32}', path.parent.name):
                 continue
             result.append({'backup_id': path.parent.name, 'mod_id': item['id'], 'name': item['name'],
                            'category': item.get('category', 'skins'), 'removed_at': record['removed_at'],
@@ -593,7 +687,7 @@ def restore(backup_id):
         if folder.exists():
             raise ValueError('Önceki klasör başka dosyalar içeriyor. Yedeği incele → Paket olarak kaydet ile dışa aktarıp yeniden içe aktar. Mevcut dosyalar korundu.')
         source = (backup / 'mod').resolve()
-        if not source.is_relative_to((root() / 'removed').resolve()) or not source.is_dir():
+        if not source.is_relative_to((root() / 'removed').resolve()) or not source.exists():
             raise ValueError('Yedek dosyaları bulunamadı')
         folder.parent.mkdir(parents=True, exist_ok=True)
         item = dict(item, enabled=False)
@@ -602,6 +696,7 @@ def restore(backup_id):
         data[item['id']] = item
         try:
             source.rename(folder)
+            _register_restored_mod(item)
             write_json(root() / 'installed.json', data)
         except Exception:
             if folder.exists() and not source.exists():
@@ -613,6 +708,26 @@ def restore(backup_id):
         return item
 
 
+def _register_restored_mod(item):
+    """A power loss may have interrupted the original client manifest write."""
+    from injection.mods.storage import ModStorageService
+    service = ModStorageService()
+    category = item.get('category', 'skins')
+    folder = mod_folder(item)
+    if category == 'skins':
+        service.set_champion_target_ids(item['champion_id'],
+            item.get('target_skin_ids') or [item['champion_id'] * 1000],
+            mod_name=item['folder_name'], mod_path=folder)
+    else:
+        manifest = folder.parent / service.CATEGORY_METADATA
+        payload = load_json(manifest, MAX_INDEX_BYTES) if manifest.exists() else {}
+        if not isinstance(payload, dict) or not isinstance(payload.get('mods', {}), dict):
+            raise ValueError('Mod hedef kayıtları bozuk; yedek korundu.')
+        mods = dict(payload.get('mods', {}))
+        mods[item['folder_name']] = {'name': item['folder_name'], 'path': item['folder_name'], 'displayName': item['name']}
+        write_json(manifest, dict(payload, version=1, category=category, mods=mods))
+
+
 def active_mod(champion_id):
     if not champion_id:
         return None
@@ -620,9 +735,12 @@ def active_mod(champion_id):
         if item.get('category', 'skins') == 'skins' and item.get('enabled') and item.get('champion_id') == champion_id:
             base = (get_user_data_dir() / 'mods').resolve()
             path = (base / item['relative_path']).resolve()
-            if path.is_relative_to(base) and path != base and path.is_dir():
-                return {'_hub': True, 'champion_id': champion_id, 'skin_id': champion_id * 1000,
-                        'storage_skin_id': champion_id * 1000, 'target_skin_ids': [champion_id * 1000],
+            if path.is_relative_to(base) and path != base and mod_available(item):
+                targets = item.get('target_skin_ids') or [champion_id * 1000]
+                chosen = item.get('selected_target_skin_id')
+                chosen = chosen if chosen in targets else targets[0]
+                return {'_hub': True, 'champion_id': champion_id, 'skin_id': chosen,
+                        'storage_skin_id': champion_id * 1000, 'target_skin_ids': targets,
                         'mod_name': item['folder_name'], 'display_name': item['name'],
                         'mod_path': str(path), 'mod_folder_name': item['folder_name'],
                         'relative_path': item['relative_path']}

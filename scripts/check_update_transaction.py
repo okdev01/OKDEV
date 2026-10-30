@@ -12,6 +12,8 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+from contextlib import ExitStack
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -26,7 +28,7 @@ def main():
         assert condition, message
         report['checks'].append(message)
     try:
-        with tempfile.TemporaryDirectory(prefix='okdev-update-qa-', dir=ROOT / 'build') as tmp:
+        with tempfile.TemporaryDirectory(prefix='okdev-update-qa-', dir=ROOT / 'build') as tmp, ExitStack() as cleanup:
             root = Path(tmp).resolve()
             install, updates = root / 'install', root / 'updates'
             install.mkdir(); updates.mkdir()
@@ -34,10 +36,12 @@ def main():
             original = ROOT / 'release' / f'OKDEV_Update_{app_version()}.zip'
             shutil.copy2(original, package)
             check(hashlib.file_digest(package.open('rb'), 'sha256').hexdigest() == original.with_suffix('.zip.sha256').read_text().split()[0], 'Release hash verified')
-            messages = []
+            messages, progress = [], []
             installer = UpdateInstaller()
-            staging = installer.extract_update(package, updates / 'staging', lambda _: None, messages.append)
+            staging = installer.extract_update(package, updates / 'staging', progress.append, messages.append)
             check(staging is not None, 'Real launcher extracted the release')
+            check(progress[0] == 0 and progress[-1] == 100 and progress == sorted(set(progress))
+                  and any(0 < value < 100 for value in progress), 'Package preparation reports monotonic measured progress')
             # A standalone .NET marker writer replaces ONLY the application's
             # executable in the isolated test payload, never in the release ZIP.
             source = root / 'LaunchStub.cs'
@@ -55,10 +59,42 @@ def main():
             check(params is not None and params['helper'].parent == updates, 'Packaged helper prepared outside installation')
             sleeper = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(1)'], creationflags=subprocess.CREATE_NO_WINDOW)
             params['pid'] = sleeper.pid
-            check(installer.launch_updater(params, install, updates, package, staging, messages.append), 'Actual frozen helper launched')
+            # Own the test helper's lifetime so a failure dialog cannot outlive
+            # the fixture or let cleanup hide the actual updater error.
+            real_popen = subprocess.Popen
+            children = []
+            def tracked_launch(*args, **kwargs):
+                process = real_popen(*args, **kwargs)
+                children.append(process)
+                return process
+            def close_helper():
+                import psutil
+                if params['log'].exists():
+                    report['updater_log'] = params['log'].read_text(encoding='utf-8')
+                for process in children:
+                    try:
+                        process.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        parent = psutil.Process(process.pid)
+                        owned = parent.children(recursive=True) + [parent]
+                        for child in owned:
+                            try:
+                                if Path(child.exe()).resolve() == params['helper'].resolve():
+                                    child.terminate()
+                            except psutil.NoSuchProcess:
+                                pass
+                        psutil.wait_procs(owned, timeout=5)
+            cleanup.callback(close_helper)
+            with patch('launcher.update.update_installer.subprocess.Popen', side_effect=tracked_launch):
+                check(installer.launch_updater(params, install, updates, package, staging, messages.append), 'Actual frozen helper launched')
             sleeper.wait(timeout=5)
             deadline = time.monotonic() + 45
             while not (install / 'launch-marker.txt').exists() and time.monotonic() < deadline:
+                if params['log'].exists():
+                    message = params['log'].read_text(encoding='utf-8')
+                    if message.startswith('Update failed'):
+                        report['previous_installation_retained'] = (install / 'OKDEV.exe').read_bytes() == b'old application fixture'
+                        raise AssertionError(message)
                 time.sleep(.2)
             check((install / 'launch-marker.txt').is_file(), 'Updated application relaunch reached marker stub')
             check('Update installed.' in params['log'].read_text(encoding='utf-8'), 'Transaction committed successfully')

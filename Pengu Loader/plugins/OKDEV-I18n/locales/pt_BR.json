@@ -185,5 +185,15 @@
   "Administrator privileges are required to enable auto-start.": "É preciso ter privilégios de administrador para ativar a inicialização automática.",
   "Administrator privileges are required to disable auto-start.": "É preciso ter privilégios de administrador para desativar a inicialização automática.",
   "Failed to enable auto-start: {error}": "Falha ao ativar a inicialização automática: {error}",
-  "Failed to disable auto-start: {error}": "Falha ao desativar a inicialização automática: {error}"
+  "Failed to disable auto-start: {error}": "Falha ao desativar a inicialização automática: {error}",
+  "Connection lost. Reopen OKDEV and try again.": "Conexão perdida. Abra o OKDEV novamente e tente de novo.",
+  "No response received. Check the connection before saving again.": "Nenhuma resposta recebida. Verifique a conexão antes de salvar novamente.",
+  "Mod imported: {name}": "Mod importado: {name}",
+  "Reload list": "Recarregar lista",
+  "Operation failed": "A operação falhou",
+  "No response received. Reload the list to check the result.": "Nenhuma resposta recebida. Recarregue a lista para verificar o resultado.",
+  "Game path is valid": "O caminho do jogo é válido",
+  "Game path is invalid": "O caminho do jogo é inválido",
+  "Validating game path…": "Verificando o caminho do jogo…",
+  "Support": "Suporte"
 }

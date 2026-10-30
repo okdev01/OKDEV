@@ -23,7 +23,7 @@ def setup_logging_and_cleanup(args: argparse.Namespace) -> None:
     # Clean up old log files on startup
     from utils.core.logging import cleanup_logs
     cleanup_logs()
-    
+
     # Determine log mode based on flags
     if args.debug:
         log_mode = 'debug'
@@ -31,7 +31,7 @@ def setup_logging_and_cleanup(args: argparse.Namespace) -> None:
         log_mode = 'verbose'
     else:
         log_mode = 'customer'
-    
+
     # Setup logging (skip log files in dev mode unless explicitly forced)
     force_logs = bool(getattr(args, "logs", False))
     write_logs = (not bool(getattr(args, "dev", False))) or force_logs
@@ -69,16 +69,16 @@ def initialize_tray_manager(args: argparse.Namespace) -> Optional[TrayManager]:
             """Callback for tray quit - will be updated with state reference later"""
             log.info("Setting stop flag from tray quit")
             # Callback will be updated later when state is initialized
-        
+
         tray_manager = TrayManager(quit_callback=tray_quit_callback)
         tray_manager.start()
         log_success(log, "System tray icon initialized - console hidden", "")
-        
+
         # Give tray icon a moment to fully initialize
         time.sleep(TRAY_INIT_SLEEP_S)
-        
+
         # Note: Status will be managed by AppStatus class
-        
+
         return tray_manager
     except Exception as e:
         log.warning(f"Failed to initialize system tray: {e}")

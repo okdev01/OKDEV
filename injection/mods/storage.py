@@ -556,6 +556,7 @@ class ModStorageService:
         champion_id: int | str,
         source_path: str | Path,
         skin_ids: object,
+        *, destination: Optional[tuple[str, Path]] = None,
     ) -> tuple[Path, Path, str]:
         """Extract one user-selected mod archive into its champion folder."""
         source = Path(source_path).expanduser()
@@ -574,11 +575,13 @@ class ModStorageService:
         if not base_name or base_name in {".", ".."}:
             raise ValueError("The selected mod file has no usable name")
 
-        mod_name, target_dir = self._choose_archive_destination(
+        mod_name, target_dir = destination or self._choose_archive_destination(
             champion_dir,
             source,
             base_name,
         )
+        if target_dir.parent.resolve() != champion_dir.resolve() or target_dir.exists():
+            raise ValueError('Mod destination changed before import')
 
         temporary_dir = Path(
             tempfile.mkdtemp(
@@ -675,7 +678,7 @@ class ModStorageService:
                 raise ValueError("Refusing to delete mod metadata file")
 
             resolved_mod_name = mod_name or target.stem
-            safe_remove_entry(target)
+            safe_remove_entry(target, strict=True)
 
             default_targets, mod_targets = self._load_target_manifest(champion_id_int)
             removed = False
@@ -719,7 +722,7 @@ class ModStorageService:
             if resolved.name == self.CATEGORY_METADATA:
                 raise ValueError("Refusing to delete mod metadata file")
 
-            safe_remove_entry(resolved)
+            safe_remove_entry(resolved, strict=True)
 
             manifest_path = category_dir / self.CATEGORY_METADATA
             try:
@@ -771,6 +774,7 @@ class ModStorageService:
         self,
         category: str,
         source_path: str | Path,
+        *, destination: Optional[tuple[str, Path]] = None,
     ) -> tuple[Path, str]:
         """Extract one user-selected archive into a registered category folder."""
         if category not in self.MOD_CATEGORIES:
@@ -788,11 +792,13 @@ class ModStorageService:
         if not base_name or base_name in {".", ".."}:
             raise ValueError("The selected mod archive has no usable name")
 
-        mod_name, target_dir = self._choose_archive_destination(
+        mod_name, target_dir = destination or self._choose_archive_destination(
             category_dir,
             source,
             base_name,
         )
+        if target_dir.parent.resolve() != category_dir.resolve() or target_dir.exists():
+            raise ValueError('Mod destination changed before import')
 
         temporary_dir = Path(
             tempfile.mkdtemp(

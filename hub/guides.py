@@ -112,6 +112,7 @@ def read_state(now=None):
         except (KeyError, TypeError, ValueError):
             pick = None
     return {'connected': data.get('connected') is True, 'phase': data.get('phase'), 'pick': pick,
+            'lane': data.get('lane') if data.get('lane') in preferences.LANES else None,
             'status': data.get('status', 'İstemci bekleniyor'), 'updated_at': timestamp}
 
 
@@ -178,7 +179,9 @@ class GuideTracker:
         self.phase = phase
         status = ('İstemci bekleniyor' if not connected else 'Şampiyonunu kilitle' if phase == 'ChampSelect' and not self.pick
                   else 'Oyun devam ediyor' if phase in GAME_PHASES else 'Rehber hazır' if self.pick else 'Bir sonraki oyununa hazır')
-        data = {'connected': bool(connected), 'phase': phase, 'pick': self.pick, 'status': status, 'updated_at': now}
+        from .draft import assigned_lane
+        data = {'connected': bool(connected), 'phase': phase, 'pick': self.pick, 'status': status, 'updated_at': now,
+                'lane': assigned_lane(session) if connected and phase == 'ChampSelect' else None}
         signature = json.dumps({k: v for k, v in data.items() if k != 'updated_at'}, sort_keys=True)
         if signature != self.signature or now - self.last_write >= 5:
             library.write_json(library.root() / 'guide.json', data)

@@ -81,16 +81,16 @@ def _move_if_needed(source, target):
         raise ValueError('Bağlantılı klasörler otomatik taşınamaz; dosyalar korunuyor.')
     if source.exists() and target.exists():
         raise ValueError('Kaynak ve hedef dosyalar birlikte mevcut; hiçbirinin üzerine yazılmadı.')
-    if source.is_dir() and not target.exists():
+    if source.exists() and not target.exists():
         target.parent.mkdir(parents=True, exist_ok=True)
         source.rename(target)
-    elif not target.is_dir():
+    elif not target.exists():
         raise ValueError('İşleme ait mod dosyaları bulunamadı; kayıt korundu.')
 
 
 def _retain_uncommitted(item):
     source = library.mod_folder(item)
-    if not source.is_dir():
+    if not source.exists():
         return
     backup = _backup(uuid.uuid4().hex)
     backup.mkdir(parents=True)
@@ -127,11 +127,11 @@ def recover_pending():
                 # The index never committed: restore the original placement.
                 if record['kind'] in ('import', 'remove') and before and backup:
                     original = library.mod_folder(before)
-                    if (backup / 'mod').is_dir() or not original.is_dir():
+                    if (backup / 'mod').exists() or not original.exists():
                         _move_if_needed(backup / 'mod', original)
                 elif record['kind'] == 'restore':
                     original = library.mod_folder(after)
-                    if original.is_dir() or not (backup / 'mod').is_dir():
+                    if original.exists() or not (backup / 'mod').exists():
                         _move_if_needed(original, backup / 'mod')
                 if record['kind'] == 'import':
                     _retain_uncommitted(after)
@@ -141,7 +141,7 @@ def recover_pending():
                     _move_if_needed(library.mod_folder(before), backup / 'mod')
                 elif record['kind'] == 'restore':
                     _move_if_needed(backup / 'mod', library.mod_folder(after))
-                if after and not library.mod_folder(after).is_dir():
+                if after and not library.mod_available(after):
                     raise ValueError('Kaydedilen modun dosyaları bulunamadı.')
             else:
                 raise ValueError('Mod kaydı yarım işlemden sonra değişmiş; dosyalar korunuyor.')

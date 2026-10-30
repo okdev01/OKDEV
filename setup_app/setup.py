@@ -3,12 +3,10 @@ from __future__ import annotations
 
 import json
 import os
-import queue
 import shutil
 import subprocess
 import sys
 import tempfile
-import threading
 import uuid
 import zipfile
 import stat
@@ -16,7 +14,7 @@ from pathlib import Path, PurePosixPath
 
 from patcher_check import read_dll_eol, read_game_build
 
-VERSION = '1.5.6'
+VERSION = '2.0.0'
 RESOURCES = Path(getattr(sys, '_MEIPASS', Path(__file__).parent))
 PATCHER_NAMES = ('ltk_patcher_host.exe', 'ltk_patcher_dll.dll')
 
@@ -219,128 +217,11 @@ def detect_paths():
 
 
 def gui(smoke=False):
-    import tkinter as tk
-    from tkinter import ttk, filedialog, messagebox
-
-    window = tk.Tk()
+    from installer_ui import run
     icon = RESOURCES / 'icon.ico'
     if not icon.is_file():
         icon = Path(__file__).resolve().parents[1] / 'assets/icon.ico'
-    if icon.is_file():
-        window.iconbitmap(str(icon))
-    window.title('OKDEV Kurulum')
-    window.geometry('760x640')
-    window.minsize(700, 640)
-    window.configure(bg='#101116')
-    if smoke:
-        window.withdraw()
-    style = ttk.Style(window)
-    style.theme_use('clam')
-    style.configure('TFrame', background='#101116')
-    style.configure('TLabel', background='#101116', foreground='#f0edf7', font=('Segoe UI', 10))
-    style.configure('Title.TLabel', font=('Segoe UI', 28, 'bold'), foreground='#baa3ff')
-    style.configure('TButton', font=('Segoe UI', 10), padding=(15, 8), background='#25232e', foreground='#f0edf7', bordercolor='#393444')
-    style.map('TButton', background=[('active', '#383046'), ('disabled', '#201e27')], foreground=[('disabled', '#77717e')])
-    style.configure('Accent.TButton', background='#baa3ff', foreground='#211734')
-    style.map('Accent.TButton', background=[('active', '#cbbaff'), ('disabled', '#665b80')], foreground=[('disabled', '#292433')])
-    style.configure('TEntry', fieldbackground='#191920', foreground='#f0edf7', insertcolor='#baa3ff', padding=7)
-    style.configure('TCheckbutton', background='#101116', foreground='#f0edf7', font=('Segoe UI', 10))
-    style.map('TCheckbutton', background=[('active', '#101116')], foreground=[('disabled', '#77717e')])
-    style.configure('Horizontal.TProgressbar', background='#baa3ff', troughcolor='#25232e', bordercolor='#25232e')
-    panel = ttk.Frame(window, padding=28)
-    panel.pack(fill='both', expand=True)
-    panel.columnconfigure(0, weight=1)
-    ttk.Label(panel, text='OKDEV', style='Title.TLabel').grid(row=0, column=0, sticky='w')
-    ttk.Label(panel, text=f'Kurulum • {VERSION}', foreground='#b4adbf').grid(row=0, column=1, sticky='e')
-    ttk.Label(panel, text='Yeni kurulum veya mevcut OKDEV klasörüne güncelleme. Güncellemede ayarlar ve eski kurulumun yedeği korunur.',
-              wraplength=650).grid(row=1, column=0, columnspan=2, sticky='w', pady=(8, 24))
-    values = [tk.StringVar(value=value) for value in detect_paths()]
-    controls = []
-    labels = ['1  LTK Manager veya mevcut OKDEV klasörü', '2  League of Legends klasörü', '3  OKDEV kurulum / güncelleme klasörü']
-    for index, (label, value) in enumerate(zip(labels, values)):
-        row = 2 + index * 2
-        ttk.Label(panel, text=label).grid(row=row, column=0, columnspan=2, sticky='w', pady=(10, 5))
-        entry = ttk.Entry(panel, textvariable=value, font=('Segoe UI', 10))
-        entry.grid(row=row + 1, column=0, sticky='ew', padx=(0, 10))
-        def choose(var=value, is_destination=index == 2):
-            selected = filedialog.askdirectory(parent=window, title='Klasör seçin', mustexist=True)
-            if selected:
-                path = Path(selected)
-                if is_destination and not (path / 'okdev-install.json').is_file() and path.name.lower() != 'okdev':
-                    path = path / 'OKDEV'
-                var.set(str(path))
-        button = ttk.Button(panel, text='Gözat…', command=choose)
-        button.grid(row=row + 1, column=1, sticky='ew')
-        controls.extend((entry, button))
-    desktop = tk.BooleanVar(value=True)
-    check = ttk.Checkbutton(panel, text='Masaüstüne OKDEV kısayolu ekle', variable=desktop)
-    check.grid(row=8, column=0, columnspan=2, sticky='w', pady=(22, 6))
-    controls.append(check)
-    status = tk.StringVar(value='LTK dosyaları seçtiğiniz klasörden alınır. Python kurulumu gerekmez.')
-    ttk.Label(panel, textvariable=status, wraplength=650, foreground='#b4adbf').grid(row=9, column=0, columnspan=2, sticky='w', pady=8)
-    bar = ttk.Progressbar(panel, mode='indeterminate')
-    bar.grid(row=10, column=0, columnspan=2, sticky='ew', pady=(2, 15))
-    messages = queue.Queue()
-    busy = False
-    installed = None
-
-    def start():
-        nonlocal busy
-        try:
-            args = validate(*(value.get().strip() for value in values))
-        except (ValueError, OSError) as error:
-            messagebox.showerror('Klasörleri kontrol edin', str(error), parent=window)
-            return
-        busy = True
-        for control in controls + [action]:
-            control.configure(state='disabled')
-        bar.start(12)
-        add_shortcut = desktop.get()
-        def worker():
-            try:
-                result = install(*args, make_shortcut=add_shortcut, progress=lambda text: messages.put(('progress', text)))
-                messages.put(('done', result))
-            except Exception as error:
-                messages.put(('error', str(error)))
-        threading.Thread(target=worker, daemon=True).start()
-
-    def poll():
-        nonlocal busy, installed
-        try:
-            while True:
-                kind, value = messages.get_nowait()
-                if kind == 'progress':
-                    status.set(value)
-                    continue
-                busy = False
-                bar.stop()
-                if kind == 'done':
-                    installed, warning = value
-                    status.set(warning or 'Kurulum tamamlandı. OKDEV açılırken Windows yönetici izni isteyebilir.')
-                    action.configure(text='OKDEV klasörünü aç', state='normal', command=lambda: os.startfile(installed))
-                else:
-                    for control in controls + [action]:
-                        control.configure(state='normal')
-                    status.set('Kurulum tamamlanamadı. Konumları kontrol edip yeniden deneyin.')
-                    messagebox.showerror('Kurulum hatası', value, parent=window)
-        except queue.Empty:
-            pass
-        window.after(100, poll)
-
-    action = ttk.Button(panel, text='Kur / Güncelle', command=start, style='Accent.TButton')
-    action.grid(row=11, column=0, columnspan=2, sticky='ew')
-    ttk.Label(panel, text='OKDEV • Açık kaynak bileşenlerin lisansları pakete dahildir.',
-              foreground='#93889f', wraplength=650).grid(row=12, column=0, columnspan=2, sticky='w', pady=(16, 0))
-    window.protocol('WM_DELETE_WINDOW', lambda: None if busy else window.destroy())
-    if smoke:
-        window.update_idletasks()
-        geometry = {'width': 760, 'height': 640,
-                    'content_width': panel.winfo_reqwidth(), 'content_height': panel.winfo_reqheight()}
-        assert geometry['content_width'] <= geometry['width'] and geometry['content_height'] <= geometry['height'], 'Installer content exceeds its window'
-        window.destroy()
-        return geometry
-    poll()
-    window.mainloop()
+    return run(VERSION, detect_paths(), validate, install, icon, smoke=smoke)
 
 
 if __name__ == '__main__':

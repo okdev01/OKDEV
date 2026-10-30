@@ -11,7 +11,7 @@ import zipfile
 from pathlib import Path
 
 from PyInstaller.archive.readers import CArchiveReader
-from PyInstaller.utils.win32 import winmanifest
+from PyInstaller.utils.win32 import winmanifest, versioninfo
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
@@ -31,6 +31,8 @@ def normalized_code(code):
 
 
 def main():
+    from sync_release_version import synchronize
+    synchronize(check=True)
     version = app_version()
     dist = ROOT / 'dist/OKDEV'
     release = ROOT / 'release'
@@ -67,24 +69,39 @@ def main():
         check(dependencies[package] in pyz.extract(module).co_consts, 'Bundled dependency version: ' + package)
     for module in ('library', 'desktop', 'covers', 'profiles', 'package_info', 'diagnostics', 'integration', 'sources', 'selfcheck', 'guides', 'companion', 'preferences', 'locking', 'downloads', 'selections', 'activity', 'transactions', 'backups', 'errors', 'lifecycle'):
         check('hub.' + module in pyz.toc, 'Bundled module: hub.' + module)
-    changed_modules = [name for name in pyz.toc if name.startswith('hub.')]
-    changed_modules += ['config', 'utils.core.mod_historic', 'utils.core.data_migration',
-        'utils.download.bundled_skins', 'utils.download.skin_downloader',
-        'utils.integration.pengu_loader', 'injection.config.config_manager', 'okdev_install_paths',
-        'injection.mods.storage', 'threads.handlers.injection_trigger', 'pengu.communication.message_handler', 'main',
-        'okdev_client_update', 'okdev_ltk_update', 'launcher.update.pending', 'launcher.update.update_sequence',
-        'launcher.update.update_installer', 'launcher.core.launcher', 'main.core.cleanup', 'main.core.state']
-    for module in changed_modules:
+    for source in (ROOT / 'hub').glob('*.py'):
+        if source.stem != '__init__':
+            check('hub.' + source.stem in pyz.toc, 'Current Hub module: ' + source.stem)
+    source_hash = hashlib.sha256()
+    compiled_module_count = 0
+    for module in sorted(pyz.toc):
         source = ROOT / (module.replace('.', '/') + '.py')
-        if module == 'main':
-            source = ROOT / 'main/__init__.py'
+        if not source.is_file() or module == 'main':
+            source = ROOT / module.replace('.', '/') / '__init__.py'
+        if not source.is_file():
+            continue  # Third-party dependencies are checked separately.
         expected = compile(source.read_bytes(), str(source), 'exec', dont_inherit=True)
         check(normalized_code(expected) == normalized_code(pyz.extract(module)), 'Current compiled code: ' + module)
-    plugin = 'Pengu Loader/plugins/OKDEV-Guide/index.js'
-    check(digest(dist / '_internal' / plugin) == digest(ROOT / plugin), 'Current client guide plugin')
+        source_hash.update(module.encode('utf-8') + b'\0' + source.read_bytes())
+        compiled_module_count += 1
+    plugins = ROOT / 'Pengu Loader/plugins'
+    for source in plugins.rglob('*'):
+        if source.is_file() and source.suffix.lower() in ('.js', '.css', '.json', '.html'):
+            relative = source.relative_to(ROOT)
+            check((dist / '_internal' / relative).is_file()
+                  and digest(dist / '_internal' / relative) == digest(source),
+                  'Current client plugin: ' + relative.as_posix())
 
     setup = release / f'OKDEV_Setup_{version}.exe'
     update = release / f'OKDEV_Update_{version}.zip'
+    for executable in (dist / 'OKDEV.exe', dist / 'OKDEV-Updater.exe', setup):
+        metadata = versioninfo.read_version_info_from_executable(str(executable))
+        check(metadata is not None, executable.name + ': Windows version resource')
+        fields = {item.name:item.val for block in metadata.kids if isinstance(block, versioninfo.StringFileInfo)
+                  for table in block.kids for item in table.kids}
+        check(fields.get('FileVersion') == version and fields.get('ProductVersion') == version,
+              executable.name + ': matching Windows file and product version')
+        check(fields.get('OriginalFilename') == executable.name, executable.name + ': correct original filename')
     for label, executable, entry, source_path in (
             ('setup', setup, 'setup', ROOT / 'setup_app/setup.py'),
             ('updater', dist / 'OKDEV-Updater.exe', 'okdev_update_helper', ROOT / 'okdev_update_helper.py')):
@@ -96,6 +113,11 @@ def main():
             source = ROOT/'okdev_client_update.py'
             check(normalized_code(compile(source.read_bytes(), str(source), 'exec', dont_inherit=True))
                   == normalized_code(embedded.extract('okdev_client_update')), 'updater: current client pause/resume module')
+        if label == 'setup':
+            source = ROOT / 'setup_app/installer_ui.py'
+            check('installer_ui' in embedded.toc, 'setup: bundled installer interface')
+            check(normalized_code(compile(source.read_bytes(), str(source), 'exec', dont_inherit=True))
+                  == normalized_code(embedded.extract('installer_ui')), 'setup: current compiled installer interface')
         for module in ('okdev_install_transaction', 'hub.locking', 'utils.core.atomic_file'):
             source = ROOT / (module.replace('.', '/') + '.py')
             check(module in embedded.toc, label + ': bundled transaction module ' + module)
@@ -161,6 +183,8 @@ def main():
     check(backend.get('ok') is True and backend.get('version') == version, 'Packaged backend self-check')
 
     result = {'ok': True, 'version': version, 'check_count': len(checks), 'file_counts': file_counts,
+              'compiled_modules_checked': compiled_module_count,
+              'compiled_source_sha256': source_hash.hexdigest(), 'app_sha256': digest(dist / 'OKDEV.exe'),
               'installer_sha256': digest(setup), 'update_sha256': digest(update),
               'backend_checks': len(backend['checks']),
               'backend_execution': 'Temporary non-elevated copy; shipped EXE remains unchanged',

@@ -39,6 +39,9 @@ def run(window, evaluate, click, wait_for, root, duration, interval=15, output=N
             cycle = report['cycles']
             click('[data-page="installed"]')
             evaluate("document.getElementById('installedCategory').value='';document.getElementById('installedFilter').value='all';document.getElementById('installedSearch').value='';document.getElementById('installedSearch').dispatchEvent(new Event('input'))")
+            view = 'list' if cycle % 2 else 'grid'
+            click('[data-view-owner="installed"][data-view-mode="' + view + '"]')
+            assert evaluate("document.getElementById('installedGrid').classList.contains('list-view') === " + str(view == 'list').lower()), 'View preference lost'
             evaluate("document.querySelector('#installedGrid .favorite').focus();window.__soakFocus=document.activeElement.closest('.card').dataset.modId")
             click('#installedGrid .favorite')
             assert evaluate("document.activeElement.classList.contains('favorite') && document.activeElement.closest('.card').dataset.modId === window.__soakFocus"), 'Focus lost after bridge action'
@@ -46,6 +49,9 @@ def run(window, evaluate, click, wait_for, root, duration, interval=15, output=N
             category = ('', 'skins', 'ui', 'maps', 'fonts', 'announcers')[cycle % 6]
             evaluate("document.getElementById('categoryFilter').value=" + json.dumps(category) + ";document.getElementById('categoryFilter').dispatchEvent(new Event('change'))")
             click('[data-page="assistants"]')
+            click('#settingsTab-play')
+            assert evaluate("!document.getElementById('settingsPanel-play').hidden"), 'Settings panel failed'
+            click('#settingsTab-appearance')
             theme = 'light' if cycle % 2 else 'dark'
             evaluate("document.getElementById('theme').value=" + json.dumps(theme) + ";document.getElementById('theme').dispatchEvent(new Event('change'))")
             wait_for("document.getElementById('main').getAttribute('aria-busy') === 'false'")
@@ -61,6 +67,12 @@ def run(window, evaluate, click, wait_for, root, duration, interval=15, output=N
                 assert evaluate("document.getElementById('importReplaceDialog').contains(document.activeElement)"), 'Replacement dialog focus escaped'
                 click('#importReplaceDialog button:not(.primary)')
                 assert evaluate("!document.getElementById('importReplaceDialog').open"), 'Cancelled preview stayed open'
+            if cycle % 3 == 0:
+                click('#searchShortcut')
+                assert evaluate("document.activeElement.id === 'commandSearch'"), 'Command input focus lost'
+                evaluate("document.getElementById('commandSearch').value='QA';document.getElementById('commandSearch').dispatchEvent(new Event('input'))")
+                click('#closeCommand')
+                wait_for("!document.getElementById('commandDialog').open")
             click('[data-page="' + pages[cycle % len(pages)] + '"]')
             assert evaluate('document.documentElement.scrollWidth <= window.innerWidth'), 'Horizontal overflow'
             assert evaluate('window.__qaErrors.length === 0'), 'Uncaught JavaScript error'

@@ -199,16 +199,9 @@ class RepoDownloader:
             if local_path is None:
                 continue
 
-            # Handle renames — delete old path, then download new
-            if status == 'renamed' and file_info.get('previous_filename'):
-                old_path = self._resolve_local_path(file_info['previous_filename'])
-                if old_path and old_path.exists():
-                    try:
-                        old_path.unlink()
-                        dirs_to_check.add(old_path.parent)
-                        log.debug(f"Removed old path {file_info['previous_filename']}")
-                    except OSError as e:
-                        log.warning(f"Failed to remove old path {old_path}: {e}")
+            # Retain the working old file until the replacement is committed.
+            old_path = (self._resolve_local_path(file_info['previous_filename'])
+                        if status == 'renamed' and file_info.get('previous_filename') else None)
 
             # Handle removals
             if status == 'removed':
@@ -219,6 +212,8 @@ class RepoDownloader:
                         log.debug(f"Removed {filename}")
                     except OSError as e:
                         log.warning(f"Failed to remove {local_path}: {e}")
+                        fail_count += 1
+                        continue
                 success_count += 1
                 progress = 10 + int(80 * idx / total)
                 self._emit_progress(progress, f"Updating files... {idx}/{total}")
@@ -233,6 +228,9 @@ class RepoDownloader:
                     for chunk in resp.iter_content(chunk_size=8192):
                         if chunk:
                             f.write(chunk)
+                if old_path and old_path != local_path and old_path.exists():
+                    old_path.unlink()
+                    dirs_to_check.add(old_path.parent)
                 success_count += 1
                 log.debug(f"Downloaded {filename}")
             except (requests.RequestException, OSError) as e:
@@ -638,6 +636,12 @@ class RepoDownloader:
                         processed_bytes += _info_size(file_info) or 1
                         update_progress("Extracting...")
 
+                # Never retire working files after an incomplete replacement.
+                self.last_extraction_failures = failed_count
+                if failed_count:
+                    log.error(f"Repository extraction incomplete ({failed_count} failures); existing files retained")
+                    return False
+
                 # Clean up files that exist locally but are no longer in the repository
                 # Only perform cleanup if we have files in the ZIP to compare against
                 # Use the reserved progress range (extraction_end to progress_end)
@@ -698,9 +702,9 @@ class RepoDownloader:
 
             remote_sha = self.fetch_remote_sha()
             if remote_sha is None:
-                log.warning("Could not fetch remote SHA, assuming no changes")
-                self._emit_progress(100, "Skins already up to date")
-                return True
+                log.warning("Could not verify remote skin library version")
+                self._emit_progress(0, "Offline: skin synchronization could not be verified")
+                return False
 
             local_sha = self.get_local_sha()
 

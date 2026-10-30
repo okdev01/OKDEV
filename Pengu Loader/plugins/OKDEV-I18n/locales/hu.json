@@ -185,5 +185,15 @@
   "Administrator privileges are required to enable auto-start.": "Az automatikus indítás bekapcsolásához rendszergazdai jogok szükségesek.",
   "Administrator privileges are required to disable auto-start.": "Az automatikus indítás kikapcsolásához rendszergazdai jogok szükségesek.",
   "Failed to enable auto-start: {error}": "Nem sikerült bekapcsolni az automatikus indítást: {error}",
-  "Failed to disable auto-start: {error}": "Nem sikerült kikapcsolni az automatikus indítást: {error}"
+  "Failed to disable auto-start: {error}": "Nem sikerült kikapcsolni az automatikus indítást: {error}",
+  "Connection lost. Reopen OKDEV and try again.": "A kapcsolat megszakadt. Nyisd meg újra az OKDEV-et, és próbáld újra.",
+  "No response received. Check the connection before saving again.": "Nem érkezett válasz. Újabb mentés előtt ellenőrizd a kapcsolatot.",
+  "Mod imported: {name}": "Mod importálva: {name}",
+  "Reload list": "Lista újratöltése",
+  "Operation failed": "A művelet sikertelen",
+  "No response received. Reload the list to check the result.": "Nem érkezett válasz. Az eredmény ellenőrzéséhez töltsd újra a listát.",
+  "Game path is valid": "A játék elérési útja érvényes",
+  "Game path is invalid": "A játék elérési útja érvénytelen",
+  "Validating game path…": "A játék elérési útjának ellenőrzése…",
+  "Support": "Segítség"
 }

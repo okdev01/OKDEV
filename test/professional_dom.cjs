@@ -69,6 +69,28 @@ const named=(host,name)=>[...document.querySelectorAll(host+' button')].find(but
     assert.equal(state.preferences.auto_ban_enabled,false);
     assert.equal($('autoBanEnabled').disabled,true);
     assert.equal(document.querySelectorAll('#catalogGrid .card').length,24);
+    $('draftLane').value='mid';$('draftLane').dispatchEvent(new window.Event('change'));
+    assert.equal($('lanePickEditor').hidden,false);
+    for(const name of ['Ahri','Lux']) { $('pickChampion').value=name;await click('#addPickChampion'); }
+    assert.deepEqual(Array.from(state.preferences.lane_profiles.mid.pick),[103,99]);
+    await click(document.querySelector('#pickPriority li button:nth-child(2)'));
+    assert.deepEqual(Array.from(state.preferences.lane_profiles.mid.pick),[99,103]);
+    await click('#autoPickEnabled');assert.equal(state.preferences.auto_pick_enabled,true);
+    $('banChampion').value='Zed';await click('#addBanChampion');
+    await click('#laneAutomation');await click('#autoBanEnabled');
+    assert.equal(state.preferences.lane_automation,true);assert.equal(state.preferences.auto_ban_enabled,true);
+    $('draftLane').value='support';$('draftLane').dispatchEvent(new window.Event('change'));
+    assert.equal(document.querySelectorAll('#pickPriority li').length,0);
+    $('pickChampion').value='Leona';await click('#addPickChampion');
+    assert.deepEqual(Array.from(state.preferences.lane_profiles.support.pick),[89]);
+    assert.deepEqual(Array.from(state.preferences.lane_profiles.mid.pick),[99,103]);
+    $('draftLane').value='mid';$('draftLane').dispatchEvent(new window.Event('change'));
+    assert.equal(document.querySelectorAll('#pickPriority li').length,2);
+    await click(document.querySelector('#banPriority li button:last-child'));
+    assert.equal(state.preferences.auto_ban_enabled,false);
+    assert.equal(state.preferences.auto_pick_enabled,true);
+    $('draftLane').value='general';$('draftLane').dispatchEvent(new window.Event('change'));
+    assert.equal($('lanePickEditor').hidden,true);
     assert.equal(document.querySelectorAll('#installedGrid .card').length,24);
     assert.ok(calls.filter(c=>c[0]==='covers').flatMap(c=>c[1]).length<=3,'Home fetches only recent covers');
     await click('[data-page="installed"]');

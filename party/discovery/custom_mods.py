@@ -23,7 +23,7 @@ log = get_logger()
 _METADATA_FILES = {"okdev_mod_targets.json"}
 
 # path -> ((mtime_ns, size), content_hash, legacy_hash)
-_hash_cache: Dict[str, Tuple[Tuple[int, int], Optional[str], Optional[str]]] = {}
+_hash_cache: Dict[str, tuple] = {}
 _cache_lock = threading.Lock()
 
 
@@ -94,7 +94,16 @@ def mod_hashes(mod_path: Path) -> Tuple[Optional[str], Optional[str]]:
         return None, None
 
     key = str(mod_path)
-    stamp = (stat.st_mtime_ns, stat.st_size)
+    try:
+        if mod_path.is_dir():
+            stamp = tuple(sorted((p.relative_to(mod_path).as_posix(), s.st_mtime_ns,
+                                  s.st_ctime_ns, s.st_size)
+                                 for p in mod_path.rglob('*') if p.is_file()
+                                 for s in (p.stat(),)))
+        else:
+            stamp = (stat.st_mtime_ns, stat.st_ctime_ns, stat.st_size)
+    except OSError:
+        return None, None
     with _cache_lock:
         cached = _hash_cache.get(key)
     if cached and cached[0] == stamp:

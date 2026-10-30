@@ -185,5 +185,15 @@
   "Administrator privileges are required to enable auto-start.": "自動起動を有効にするには管理者権限が必要です。",
   "Administrator privileges are required to disable auto-start.": "自動起動を無効にするには管理者権限が必要です。",
   "Failed to enable auto-start: {error}": "自動起動を有効にできませんでした: {error}",
-  "Failed to disable auto-start: {error}": "自動起動を無効にできませんでした: {error}"
+  "Failed to disable auto-start: {error}": "自動起動を無効にできませんでした: {error}",
+  "Connection lost. Reopen OKDEV and try again.": "接続が切れました。OKDEVを開き直して再試行してください。",
+  "No response received. Check the connection before saving again.": "応答がありません。再保存する前に接続を確認してください。",
+  "Mod imported: {name}": "Modをインポートしました: {name}",
+  "Reload list": "一覧を再読み込み",
+  "Operation failed": "操作に失敗しました",
+  "No response received. Reload the list to check the result.": "応答がありません。一覧を再読み込みして結果を確認してください。",
+  "Game path is valid": "ゲームのパスは有効です",
+  "Game path is invalid": "ゲームのパスが無効です",
+  "Validating game path…": "ゲームのパスを確認中…",
+  "Support": "サポート"
 }

@@ -211,10 +211,12 @@ class InjectionTrigger:
         self.state.last_hover_written = True
         selected_custom_mod = getattr(self.state, 'selected_custom_mod', None)
         from hub.library import active_mod
+        from hub.client_sync import history_path_allowed
         hub_mod = active_mod(self.state.locked_champ_id or self.state.hovered_champ_id)
         if hub_mod:
             selected_custom_mod = hub_mod
-        elif selected_custom_mod and selected_custom_mod.get('_hub'):
+        elif selected_custom_mod and (selected_custom_mod.get('_hub') or
+                not history_path_allowed(selected_custom_mod.get('relative_path', ''))):
             selected_custom_mod = None
         self.state.selected_custom_mod = selected_custom_mod
         mod_name = None
@@ -295,6 +297,8 @@ class InjectionTrigger:
                     historic_value = get_historic_skin_for_champion(champ_id) if champ_id else None
                     if historic_value and is_custom_mod_path(historic_value):
                         historic_custom_mod_path = get_custom_mod_path(historic_value)
+                        if not history_path_allowed(historic_custom_mod_path):
+                            historic_custom_mod_path = None
 
                     # Only auto-select if the stored custom-mod path matches the skin we're injecting.
                     # This avoids injecting a random mod from another skin.
@@ -435,6 +439,8 @@ class InjectionTrigger:
                         historic_path = historic_mods.get(mod_type)
                         if not historic_path:
                             return
+                        if isinstance(historic_path, str) and not history_path_allowed(historic_path):
+                            return
 
                         # For category-mods selection, historic data is stored per category key
                         # (ui/voiceover/loading_screen/vfx/sfx/others). We treat them together here.
@@ -446,6 +452,7 @@ class InjectionTrigger:
                                     historic_paths.extend(v)
                                 elif isinstance(v, str):
                                     historic_paths.append(v)
+                            historic_paths = [p for p in historic_paths if history_path_allowed(p)]
                             if not historic_paths:
                                 return
                             
@@ -507,12 +514,9 @@ class InjectionTrigger:
                                     
                                     # Extract/copy mod to injection mods directory via junction
                                     extract_cache_dir = get_injection_dir() / ".extract_cache"
-                                    if mod_source.is_dir():
-                                        mod_dest = injector.mods_dir / mod_source.name
-                                    elif mod_source.is_file() and mod_source.suffix.lower() in {".zip", ".fantome"}:
-                                        mod_dest = injector.mods_dir / mod_source.stem
-                                    else:
-                                        mod_dest = injector.mods_dir / mod_folder_name
+                                    from utils.core.junction import staging_name
+                                    mod_folder_name = staging_name(mod_source)
+                                    mod_dest = injector.mods_dir / mod_folder_name
                                     if mod_dest.exists() or is_junction(mod_dest):
                                         safe_remove_entry(mod_dest)
                                     link_or_extract(mod_source, mod_dest, cache_dir=extract_cache_dir)
@@ -603,12 +607,9 @@ class InjectionTrigger:
                             
                             # Extract/copy mod to injection mods directory via junction
                             extract_cache_dir = get_injection_dir() / ".extract_cache"
-                            if mod_source.is_dir():
-                                mod_dest = injector.mods_dir / mod_source.name
-                            elif mod_source.is_file() and mod_source.suffix.lower() in {".zip", ".fantome"}:
-                                mod_dest = injector.mods_dir / mod_source.stem
-                            else:
-                                mod_dest = injector.mods_dir / mod_folder_name
+                            from utils.core.junction import staging_name
+                            mod_folder_name = staging_name(mod_source)
+                            mod_dest = injector.mods_dir / mod_folder_name
                             if mod_dest.exists() or is_junction(mod_dest):
                                 safe_remove_entry(mod_dest)
                             link_or_extract(mod_source, mod_dest, cache_dir=extract_cache_dir)
@@ -672,17 +673,15 @@ class InjectionTrigger:
                 # using it for an owned skin can move the overlay onto the
                 # carrier's skin0 paths and prevent a mod targeting the actual
                 # owned skin (for example Spirit Blossom Sett) from applying.
-                target_is_owned = (
-                    effective_skin_id in owned_skin_ids
-                    or ui_skin_id in owned_skin_ids
-                )
+                target_is_owned = (target_skin_id in owned_skin_ids or
+                                   target_skin_id == (custom_mod_champion_id or 0) * 1000)
 
                 if target_is_owned:
-                    self._force_owned_skin(effective_skin_id)
+                    self._force_owned_skin(target_skin_id)
                     log.info(
                         "[INJECT] Custom mod targets owned skin %s; "
                         "keeping the real owned skin and injecting the mod only",
-                        effective_skin_id,
+                        target_skin_id,
                     )
                     self._inject_custom_mod(
                         selected_custom_mod,
@@ -1251,6 +1250,12 @@ class InjectionTrigger:
                 or self.state.hovered_champ_id
             )
             
+            # Do not destroy a working overlay for an already removed selection.
+            if mod_folder_name and (not mod_path or not Path(mod_path).exists()):
+                log.warning('[INJECT] Custom mod is no longer available: %s', mod_path)
+                self.state.selected_custom_mod = None
+                return
+
             # Clean mods directory first (before extracting base skin and custom mod)
             injector._clean_mods_dir()
             injector._clean_overlay_dir()
@@ -1325,6 +1330,8 @@ class InjectionTrigger:
                         return
 
                     extract_cache_dir = get_injection_dir() / ".extract_cache"
+                    from utils.core.junction import staging_name
+                    mod_folder_name = staging_name(mod_source, mod_folder_name)
                     mod_dest = injector.mods_dir / mod_folder_name
                     if mod_dest.exists() or is_junction(mod_dest):
                         safe_remove_entry(mod_dest)
@@ -1375,6 +1382,8 @@ class InjectionTrigger:
                         return None
 
                     extract_cache_dir = get_injection_dir() / ".extract_cache"
+                    from utils.core.junction import staging_name
+                    mod_folder_name = staging_name(mod_source, mod_folder_name)
                     mod_dest = injector.mods_dir / mod_folder_name
                     if mod_dest.exists() or is_junction(mod_dest):
                         safe_remove_entry(mod_dest)
@@ -1588,7 +1597,7 @@ class InjectionTrigger:
                 # Store mod selections in historic before clearing
                 try:
                     from utils.core.mod_historic import write_historic_mod
-                    from utils.core.historic import write_historic_entry, write_historic_target
+                    from utils.core.historic import write_historic_entry, write_historic_selection
                     
                     # Store custom skin mod in historic if selected
                     selected_custom_mod = getattr(self.state, 'selected_custom_mod', None)
@@ -1597,10 +1606,9 @@ class InjectionTrigger:
                         if champion_id:
                             # Store custom mod path with "path:" prefix
                             custom_mod_path = f"path:{selected_custom_mod['relative_path']}"
-                            write_historic_entry(int(champion_id), custom_mod_path)
                             target_skin_id = selected_custom_mod.get("skin_id")
-                            if target_skin_id:
-                                write_historic_target(int(champion_id), int(target_skin_id))
+                            write_historic_selection(int(champion_id), custom_mod_path,
+                                                     int(target_skin_id) if target_skin_id else None)
                             log.debug(f"[HISTORIC] Stored custom mod path for champion {champion_id}: {selected_custom_mod['relative_path']}")
                     elif base_skin_name:
                         # Store base skin ID in historic if injecting base skin with mods (no custom mod)

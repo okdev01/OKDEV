@@ -1543,7 +1543,10 @@
           if (bridge) bridge.send({ type: "select-map", mapId: null });
         }
         noneItem.classList.add("selected-row");
-        refreshSummaryValues(); refreshButtonBadgeFromSelections();
+        if (isOpen && activeTab === "maps") updateMapsEntries(lastMapsList);
+      if (isOpen && activeTab === "fonts") updateFontsEntries(lastFontsList);
+      if (isOpen && activeTab === "announcers") updateAnnouncersEntries(lastAnnouncersList);
+      refreshSummaryValues(); refreshButtonBadgeFromSelections();
       });
       noneItem.appendChild(noneRow);
       mapsListEl.appendChild(noneItem);
@@ -2361,6 +2364,37 @@
     return true;
   }
 
+  function showSelectionError(message) {
+    let notice = document.getElementById("okdev-mod-selection-error");
+    if (!message) { notice?.remove(); return; }
+    if (!notice) {
+      notice = document.createElement("div"); notice.id = "okdev-mod-selection-error";
+      notice.setAttribute("role", "alert");
+      Object.assign(notice.style, {position:"fixed",right:"24px",top:"80px",maxWidth:"360px",padding:"16px",border:"1px solid #b76a76",borderRadius:"8px",background:"#211823",color:"#f6e9ed",fontSize:"13px",lineHeight:"1.6",zIndex:"100000",boxShadow:"0 8px 28px #0008"});
+      document.body.appendChild(notice);
+    }
+    notice.replaceChildren(document.createTextNode(String(message)));
+    const dismiss = document.createElement("button"); dismiss.textContent = "×"; dismiss.setAttribute("aria-label", "Bildirimi kapat");
+    Object.assign(dismiss.style,{marginLeft:"12px",background:"transparent",color:"inherit",border:"0",cursor:"pointer",fontSize:"20px"});
+    dismiss.onclick=()=>notice.remove(); notice.appendChild(dismiss);
+  }
+
+  function handleCategorySelectionResult(data) {
+    if (!data || data.type !== "category-selection-result") return;
+    if (data.selected && typeof data.selected === "object") {
+      if (Array.isArray(data.selected.maps)) selectedMapId=data.selected.maps[0]||null;
+      if (Array.isArray(data.selected.fonts)) selectedFontId=data.selected.fonts[0]||null;
+      if (Array.isArray(data.selected.announcers)) selectedAnnouncerId=data.selected.announcers[0]||null;
+
+      for (const tab of OTHER_CATEGORY_TABS) {
+        if (Array.isArray(data.selected[tab.id])) selectedCategoryIds[tab.id]=data.selected[tab.id].map(String);
+      }
+      if (isOpen && OTHER_CATEGORY_TABS.some(tab=>tab.id===activeTab)) updateOtherCategoryEntries(activeTab,lastCategoryModsById[activeTab]||[]);
+      refreshSummaryValues(); refreshButtonBadgeFromSelections();
+    }
+    showSelectionError(data.success ? null : data.error || "Mod seçimi kaydedilemedi. Tekrar dene.");
+  }
+
   function handleSelectionResult(event) {
     const detail = event?.detail;
     if (!detail || detail.type !== "custom-mod-selection-result") return;
@@ -2374,6 +2408,8 @@
 
     if (!detail.success) {
       console.warn(`${LOG_PREFIX} Custom skin selection failed: ${detail.error || "unknown error"}`);
+      showSelectionError(detail.error || "Mod seçimi kaydedilemedi. Tekrar dene.");
+      requestModsForCurrentSkin();
       refreshSummaryValues();
       refreshButtonBadgeFromSelections();
       return;
@@ -2451,7 +2487,16 @@
     ));
     currentSkinMods = mods;
 
-    if (selectedModId && !pendingSelectionRequest) {
+    if (detail.selectionAuthoritative && !pendingSelectionRequest) {
+      const selection = detail.selection;
+      const compatible = [liveSkinId, ...(detail.compatibleSkinIds || []).map(Number)];
+      const match = selection && compatible.includes(Number(selection.skinId)) &&
+        mods.find(m => m.relativePath === selection.relativePath);
+      selectedModId = match ? (match.relativePath || match.modName) : null;
+      selectedModSkinId = match ? Number(selection.skinId) : null;
+    }
+
+    if (!detail.selectionAuthoritative && selectedModId && !pendingSelectionRequest) {
       const selectedEntry = mods.find((mod) => (
         String(mod?.relativePath || mod?.modName || "") === String(selectedModId)
       ));
@@ -2470,7 +2515,7 @@
     const historicMod = detail.historicMod;
     let didAutoSelect = false;
     let historicSelectionId = null;
-    if (historicMod && !selectedModId && !pendingSelectionRequest) {
+    if (!detail.selectionAuthoritative && historicMod && !selectedModId && !pendingSelectionRequest) {
       // Find the mod that matches the historic path
       const historicModEntry = mods.find(mod => {
         const modPath = mod.relativePath || "";
@@ -2536,6 +2581,11 @@
 
     // Check for historic mod and auto-select it
     const historicMod = detail.historicMod;
+    {
+      const selected = mapsList.find(item => normalizePathLike(item.id) === normalizePathLike(historicMod));
+      selectedMapId = selected ? selected.id : null;
+    }
+
     if (historicMod && !selectedMapId) {
       // Find the mod that matches the historic path
       // historicMod is the relative path (e.g., "maps/default-summoner-rift_1.0.1")
@@ -2562,7 +2612,7 @@
     }
 
     // After UI is updated, emit selection to backend if historic mod was found
-    if (historicMod && selectedMapId) {
+    if (!detail.selectionAuthoritative && historicMod && selectedMapId) {
       const historicMap = mapsList.find(map => {
         const mapId = map.id || map.name || `map-${Date.now()}-${Math.random()}`;
         return mapId === selectedMapId;
@@ -2590,6 +2640,11 @@
 
     // Check for historic mod and auto-select it
     const historicMod = detail.historicMod;
+    {
+      const selected = fontsList.find(item => normalizePathLike(item.id) === normalizePathLike(historicMod));
+      selectedFontId = selected ? selected.id : null;
+    }
+
     if (historicMod && !selectedFontId) {
       // Find the mod that matches the historic path
       const historicFont = fontsList.find(font => {
@@ -2613,7 +2668,7 @@
     }
 
     // After UI is updated, emit selection to backend if historic mod was found
-    if (historicMod && selectedFontId) {
+    if (!detail.selectionAuthoritative && historicMod && selectedFontId) {
       const historicFont = fontsList.find(font => {
         const fontId = font.id || font.name || `font-${Date.now()}-${Math.random()}`;
         return fontId === selectedFontId;
@@ -2641,6 +2696,11 @@
 
     // Check for historic mod and auto-select it
     const historicMod = detail.historicMod;
+    {
+      const selected = announcersList.find(item => normalizePathLike(item.id) === normalizePathLike(historicMod));
+      selectedAnnouncerId = selected ? selected.id : null;
+    }
+
     if (historicMod && !selectedAnnouncerId) {
       // Find the mod that matches the historic path
       const historicAnnouncer = announcersList.find(announcer => {
@@ -2664,7 +2724,7 @@
     }
 
     // After UI is updated, emit selection to backend if historic mod was found
-    if (historicMod && selectedAnnouncerId) {
+    if (!detail.selectionAuthoritative && historicMod && selectedAnnouncerId) {
       const historicAnnouncer = announcersList.find(announcer => {
         const announcerId = announcer.id || announcer.name || `announcer-${Date.now()}-${Math.random()}`;
         return announcerId === selectedAnnouncerId;
@@ -2695,6 +2755,7 @@
     const historicMod = detail.historicMod;
     const historicMods = Array.isArray(historicMod) ? historicMod : (historicMod ? [historicMod] : []);
     
+    if (detail.selectionAuthoritative) selectedCategoryIds.others = othersList.filter(mod => historicMods.some(path => normalizePathLike(path) === normalizePathLike(mod.id))).map(mod => mod.id);
     const selectedIds = getSelectedIdsForCategory("others");
     if (historicMods.length > 0 && selectedIds.length === 0) {
       // Find all mods that match the historic paths
@@ -2730,7 +2791,7 @@
     updateOtherCategoryEntries("others", othersList);
 
     // After UI is updated, emit selection to backend for all historic mods found
-    if (historicMods.length > 0 && selectedIds.length > 0) {
+    if (!detail.selectionAuthoritative && historicMods.length > 0 && selectedIds.length > 0) {
       for (const historicPath of historicMods) {
         const historicOther = othersList.find(other => {
           const otherId = other.id || "";
@@ -2770,6 +2831,7 @@
     // Apply historic selections for this specific category.
     const historicMod = detail.historicMod;
     const historicMods = Array.isArray(historicMod) ? historicMod : (historicMod ? [historicMod] : []);
+    selectedCategoryIds[category] = modsList.filter(mod => historicMods.some(path => normalizePathLike(path) === normalizePathLike(mod.id))).map(mod => mod.id);
     if (historicMods.length > 0) {
       for (const historicPath of historicMods) {
         const match = modsList.find((m) => {
@@ -2783,7 +2845,7 @@
           selectedIds.push(otherId);
         }
         const key = `${category}:${otherId}`;
-        if (!emittedHistoricSelectionKeys.has(key)) {
+        if (!detail.selectionAuthoritative && !emittedHistoricSelectionKeys.has(key)) {
           emittedHistoricSelectionKeys.add(key);
           if (bridge) bridge.send({ type: "select-other", category, otherId, otherData: match, action: "select" });
         }
@@ -2888,6 +2950,7 @@
       bridge.subscribe("settings-data", (data) => handleSettingsData({ detail: data }));
       bridge.subscribe("skin-mods-response", (data) => handleModsResponse({ detail: data }));
       bridge.subscribe("custom-mod-selection-result", (data) => handleSelectionResult({ detail: data }));
+      bridge.subscribe("category-selection-result", handleCategorySelectionResult);
       bridge.subscribe("chroma-state", handleChromaStateUpdate);
       bridge.subscribe("phase-change", handlePhaseChange);
       bridge.subscribe("maps-response", (data) => handleMapsResponse({ detail: data }));

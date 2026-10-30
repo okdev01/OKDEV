@@ -26,7 +26,7 @@ class AutoAccept:
         return False
 
 
-def tick_helpers(lcu, accept, tracker, log, ban=None):
+def tick_helpers(lcu, accept, tracker, log, ban=None, pick=None):
     """A failed optional guide must never prevent the independent ready check."""
     from . import companion, preferences, guides
     try:
@@ -50,6 +50,16 @@ def tick_helpers(lcu, accept, tracker, log, ban=None):
                     log.info('OKDEV auto ban: %s', ban.status)
     except Exception as exc:
         log.debug('OKDEV auto ban unavailable: %s', type(exc).__name__)
+    try:
+        if pick is not None:
+            previous_status = pick.status
+            try:
+                pick.tick(lcu, phase)
+            finally:
+                if pick.status != previous_status:
+                    log.info('OKDEV auto pick: %s', pick.status)
+    except Exception as exc:
+        log.debug('OKDEV auto pick unavailable: %s', type(exc).__name__)
     try:
         prefs = preferences.get()
         session = None
@@ -83,11 +93,13 @@ def start_helpers(state):
         accept = AutoAccept()
         from .autoban import AutoBan
         ban = AutoBan()
+        from .autopick import AutoPick
+        pick = AutoPick()
         from .guides import GuideTracker
         from . import companion
         tracker = GuideTracker()
         while not state.stop:
-            tick_helpers(lcu, accept, tracker, get_logger(), ban)
+            tick_helpers(lcu, accept, tracker, get_logger(), ban, pick)
             time.sleep(2)
         companion.command('quit')
     threading.Thread(target=worker, daemon=True, name='okdev-assistants').start()

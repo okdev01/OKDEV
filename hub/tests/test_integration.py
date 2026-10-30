@@ -25,6 +25,7 @@ class CategoryIntegrationTests(LibraryFixture):
     def test_disabled_hub_mod_preserves_external_category_selection(self):
         self.add('fonts', 'my-font')
         external = {'relative_path': 'fonts/external', 'mod_name': 'External'}
+        (self.root / 'mods/fonts/external').mkdir(parents=True)
         state = SimpleNamespace(selected_font_mod=external)
         apply_category_selections(state)
         self.assertIs(state.selected_font_mod, external)
@@ -33,6 +34,7 @@ class CategoryIntegrationTests(LibraryFixture):
         self.add('ui', 'my-hud')
         library.enable('my-hud', True)
         external = {'relative_path': 'vfx/external'}
+        (self.root / 'mods/vfx/external').mkdir(parents=True)
         state = SimpleNamespace(selected_other_mod=external)
         for _ in range(3):
             apply_category_selections(state)

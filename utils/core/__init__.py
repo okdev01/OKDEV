@@ -30,7 +30,7 @@ def __getattr__(name):
             log_status, get_log_mode, log_event, log_action
         )
         return locals()[name]
-    
+
     if name in {
         'get_champion_id_from_skin_id', 'is_default_skin', 'is_owned',
         'is_chroma_id', 'get_base_skin_id_for_chroma', 'is_base_skin',
@@ -42,7 +42,7 @@ def __getattr__(name):
             is_base_skin_owned, find_free_port
         )
         return locals()[name]
-    
+
     if name in {
         'validate_skin_id', 'validate_skin_name', 'validate_champion_id',
         'validate_positive_number', 'require_non_empty_list', 'validated_method'
@@ -52,11 +52,11 @@ def __getattr__(name):
             validate_positive_number, require_non_empty_list, validated_method
         )
         return locals()[name]
-    
+
     if name in {'levenshtein_distance', 'levenshtein_score'}:
         from utils.core.normalization import levenshtein_distance, levenshtein_score
         return locals()[name]
-    
+
     if name in {
         'load_historic_map', 'get_historic_skin_for_champion', 'write_historic_entry'
     }:
@@ -64,7 +64,7 @@ def __getattr__(name):
             load_historic_map, get_historic_skin_for_champion, write_historic_entry
         )
         return locals()[name]
-    
+
     raise AttributeError(f"module 'utils.core' has no attribute '{name}'")
 
 __all__ = [

@@ -19,6 +19,16 @@ def build_html(base=None):
     from .sources import entries
     from config import APP_VERSION
     bootstrap = {'version': APP_VERSION, 'sources': entries(), 'champions': json.loads((web / 'champions.json').read_text(encoding='utf-8'))['champions']}
+    # Paint the saved appearance before the asynchronous WebView bridge is
+    # ready. Only presentation preferences enter the bootstrap, never tokens
+    # or unrelated settings; damaged settings still permit the UI to open.
+    try:
+        from . import preferences
+        saved = preferences.get()
+        bootstrap['appearance'] = {key: saved[key] for key in
+                                   ('theme', 'mod_view', 'compact_cards', 'reduce_motion', 'data_saver')}
+    except (OSError, ValueError):
+        bootstrap['appearance'] = {}
     encoded = json.dumps(bootstrap, ensure_ascii=False).replace('<', '\\u003c')
     return html.replace('/*BOOTSTRAP*/', 'window.HUB_DATA=' + encoded + ';').replace(
         '/*APP_JS*/', (web / 'app.js').read_text(encoding='utf-8')).replace(
@@ -66,6 +76,7 @@ class Api:
         self._queue_lock = threading.Lock()
         self._profile_import = None
         self._closing = False
+        self._client_reconciled = False
         self._allow_close = False
         self._close_lock = threading.Lock()
         try:
@@ -148,17 +159,18 @@ class Api:
         return self._run(lambda: self._downloads().repair_history())
 
     def snapshot(self, refresh=False):
+        revision = self.state_revision()
         # Local actions must not wait on a network timeout. Fetch only when
         # the user explicitly refreshes the public catalog.
         data, warning = library.catalog(bool(refresh), allow_network=bool(refresh))
         try:
             with library.mutation_lock():
-                pass  # Recover folder/index mutations before reading.
-        except ValueError as exc:
-            warning = (warning + ' ' + str(exc)).strip()
-        try:
-            installed = library.installed(strict=True)
-        except ValueError as exc:
+                installed = library.installed(strict=True)
+                if not self._client_reconciled:
+                    from .client_sync import reconcile
+                    reconcile(data=installed)
+                    self._client_reconciled = True
+        except (ValueError, OSError) as exc:
             installed = library.installed()
             warning = (warning + ' ' + str(exc)).strip()
         try:
@@ -168,18 +180,30 @@ class Api:
             warning = (warning + ' ' + str(exc)).strip()
         from .profiles import list_profiles
         try:
-            profiles = list_profiles(strict=True)
+            profiles = list_profiles(strict=True, resolve=True)
         except ValueError as exc:
             profiles = {}
             warning = (warning + ' ' + str(exc)).strip()
         for mod_id, item in installed.items():
-            item['files_available'] = library.mod_folder(item).is_dir()
+            item['files_available'] = library.mod_available(item)
         from . import preferences, guides, companion, selections, activity
         return {'catalog': data['mods'], 'installed': installed, 'settings': settings,
                 'preferences': preferences.get(), 'guide': guides.read_state(), 'companion': companion.status(),
                 'removed': library.removed(), 'profiles': profiles, 'warning': warning,
                 'downloads': self.downloads_status(), 'selection_undo': selections.undo_status(installed),
-                'activity': activity.read()}
+                'activity': activity.read(), 'revision': revision}
+
+    def state_revision(self):
+        """Cheap, local change detection across Hub and in-client writers."""
+        import hashlib
+        tokens = []
+        for name in ('installed.json', 'profiles.json', 'settings.json', 'removed', 'activity.json'):
+            try:
+                stat = (library.root() / name).stat()
+                tokens.append((name, stat.st_mtime_ns, stat.st_size))
+            except FileNotFoundError:
+                tokens.append((name, None))
+        return hashlib.sha256(repr(tokens).encode()).hexdigest()
 
     def cover_previews(self, mod_ids):
         if not isinstance(mod_ids, list) or len(mod_ids) > 48 or not all(library.valid_id(v) for v in mod_ids):
@@ -250,17 +274,19 @@ class Api:
     def choose_profile(self):
         def action():
             import webview
-            from .profiles import inspect_portable
+            from .profiles import inspect_portable, MAX_PROFILE_BYTES
             self._profile_import = None
             paths = self._window.create_file_dialog(webview.FileDialog.OPEN, allow_multiple=False,
                 file_types=('OKDEV profili (*.json)',))
             if not paths:
                 return None
             path = Path(paths if isinstance(paths, str) else paths[0])
-            if path.stat().st_size > 512 * 1024:
-                raise ValueError('Profil dosyası çok büyük. En fazla 512 KB olabilir.')
+            with path.open('rb') as stream:
+                raw = stream.read(MAX_PROFILE_BYTES + 1)
+            if len(raw) > MAX_PROFILE_BYTES:
+                raise ValueError('Profil dosyası çok büyük. En fazla 4 MB olabilir.')
             try:
-                document = json.loads(path.read_text(encoding='utf-8-sig'))
+                document = json.loads(raw.decode('utf-8-sig'))
             except (ValueError, UnicodeError):
                 raise ValueError('Profil dosyası okunamadı. Geçerli bir OKDEV profili seç.') from None
             preview = inspect_portable(document)
@@ -415,13 +441,13 @@ class Api:
             return {'ok': False, 'error': 'Geçersiz mod seçimi.'}
         return self._run(lambda: selections.apply([mod_id], 'enable' if enabled else 'disable'))
 
-    def preview_selection(self, mod_ids, mode='enable'):
+    def preview_selection(self, mod_ids, mode='enable', targets=None):
         from . import selections
-        return self._run(lambda: selections.preview(mod_ids, mode))
+        return self._run(lambda: selections.preview(mod_ids, mode, targets))
 
-    def apply_selection(self, mod_ids, mode, revision):
+    def apply_selection(self, mod_ids, mode, revision, targets=None):
         from . import selections
-        return self._run(lambda: selections.apply(mod_ids, mode, revision))
+        return self._run(lambda: selections.apply(mod_ids, mode, revision, targets=targets))
 
     def undo_selection(self):
         from . import selections
@@ -439,7 +465,7 @@ class Api:
     def choose_mod(self):
         import webview
         paths = self._window.create_file_dialog(webview.FileDialog.OPEN, allow_multiple=False,
-                                                file_types=('Mod paketi (*.fantome;*.zip)',))
+                                                file_types=('Mod paketi (*.fantome;*.zip;*.modpkg)',))
         if not paths:
             return None
         from .package_info import inspect

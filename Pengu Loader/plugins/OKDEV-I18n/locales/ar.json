@@ -185,5 +185,15 @@
   "Administrator privileges are required to enable auto-start.": "يلزم امتلاك صلاحيات المسؤول لتفعيل التشغيل التلقائي.",
   "Administrator privileges are required to disable auto-start.": "يلزم امتلاك صلاحيات المسؤول لتعطيل التشغيل التلقائي.",
   "Failed to enable auto-start: {error}": "تعذّر تفعيل التشغيل التلقائي: {error}",
-  "Failed to disable auto-start: {error}": "تعذّر تعطيل التشغيل التلقائي: {error}"
+  "Failed to disable auto-start: {error}": "تعذّر تعطيل التشغيل التلقائي: {error}",
+  "Connection lost. Reopen OKDEV and try again.": "انقطع الاتصال. أعد فتح OKDEV وحاول مجددًا.",
+  "No response received. Check the connection before saving again.": "لم يصل رد. تحقق من الاتصال قبل الحفظ مجددًا.",
+  "Mod imported: {name}": "تم استيراد التعديل: {name}",
+  "Reload list": "تحديث القائمة",
+  "Operation failed": "فشلت العملية",
+  "No response received. Reload the list to check the result.": "لم يصل رد. حدّث القائمة للتحقق من النتيجة.",
+  "Game path is valid": "مسار اللعبة صالح",
+  "Game path is invalid": "مسار اللعبة غير صالح",
+  "Validating game path…": "جارٍ التحقق من مسار اللعبة…",
+  "Support": "الدعم"
 }

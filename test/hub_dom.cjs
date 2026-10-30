@@ -105,7 +105,8 @@ const change=async (id,value)=>{const el=$(id);if(el.type==='checkbox')el.checke
     await click('[data-page="installed"]');
     const toggle=document.querySelector('#installedGrid .actions button');toggle.focus();await click(toggle);
     assert.ok(document.activeElement.closest('#installedGrid'),'Keyboard focus is restored after a mod action');
-    document.dispatchEvent(new window.KeyboardEvent('keydown',{key:'k',ctrlKey:true,bubbles:true}));assert.equal(document.activeElement.id,'search');
+    document.dispatchEvent(new window.KeyboardEvent('keydown',{key:'k',ctrlKey:true,bubbles:true}));assert.equal(document.activeElement.id,'commandSearch');
+    assert.equal($('commandDialog').open,true);
     assert.deepEqual(errors,[], 'UI interaction exceptions');
     console.log('UI flows passed: navigation, filters, detail, source import, file metadata, guide toggle/manual build, theme, compact mode, auto-accept, profiles, keyboard search. No windows opened.');
   } finally { window.close(); }

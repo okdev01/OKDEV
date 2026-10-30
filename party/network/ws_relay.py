@@ -328,6 +328,10 @@ class PartyRelay:
                 return
             self._ws = None
             self._connected = False
+            if self._room_full or getattr(ws, 'close_reason', None) == 'room full':
+                self.last_error = 'Party room is full'
+                self._stop('the room is full')
+                return
             if getattr(ws, "close_reason", None) == REPLACED_REASON:
                 self._stop("this account joined it from another connection")
                 return
@@ -351,6 +355,11 @@ class PartyRelay:
                 except json.JSONDecodeError:
                     continue
 
+                if isinstance(msg, dict) and msg.get('type') == 'error' and msg.get('code') == 'ROOM_FULL':
+                    self._room_full = True
+                    self.last_error = 'Party room is full'
+                    await ws.close()
+                    return
                 if isinstance(msg, dict) and msg.get("type") == "members":
                     members = msg.get("members")
                     self.members = [m for m in members if isinstance(m, dict)] if isinstance(members, list) else []

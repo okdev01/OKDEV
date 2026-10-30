@@ -3,6 +3,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -79,6 +80,74 @@ class InstallationTransactionTests(unittest.TestCase):
         self.assertEqual((self.target / 'OKDEV.exe').read_bytes(), b'old')
         self.assertTrue(self.prepared.exists())
         self.assertFalse(transaction.journal_path(self.target).exists())
+
+    def test_transient_windows_sharing_error_retries_commit(self):
+        original = Path.rename
+        attempts = []
+        def rename(source, target):
+            if source == self.prepared:
+                attempts.append(source)
+                if len(attempts) == 1:
+                    error = PermissionError('temporary Windows reader')
+                    error.winerror = 32
+                    raise error
+            return original(source, target)
+        with patch.object(Path, 'rename', rename), patch.object(transaction.time, 'sleep'):
+            transaction.commit(self.target, self.prepared, self.backup)
+        self.assertEqual(len(attempts), 2)
+        self.assertEqual((self.target / 'OKDEV.exe').read_bytes(), b'new')
+        self.assertEqual((self.backup / 'OKDEV.exe').read_bytes(), b'old')
+
+    def test_persistent_windows_access_error_times_out_and_rolls_back(self):
+        original = Path.rename
+        def rename(source, target):
+            if source == self.prepared:
+                error = PermissionError('permanent access denial')
+                error.winerror = 5
+                raise error
+            return original(source, target)
+        # First rename gets t=0, second gets t=1 then its deadline is exceeded.
+        with patch.object(Path, 'rename', rename), patch.object(transaction.time, 'monotonic', side_effect=[0, 1, 4, 5]), self.assertRaises(PermissionError):
+            transaction.commit(self.target, self.prepared, self.backup)
+        self.assertEqual((self.target / 'OKDEV.exe').read_bytes(), b'old')
+        self.assertTrue(self.prepared.exists())
+        self.assertFalse(transaction.journal_path(self.target).exists())
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows directory sharing behavior')
+    def test_actual_windows_directory_lock_released_during_commit(self):
+        import ctypes
+        from ctypes import wintypes
+        kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+        kernel.CreateFileW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
+            ctypes.c_void_p, wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE]
+        kernel.CreateFileW.restype = wintypes.HANDLE
+        kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+        kernel.CloseHandle.restype = wintypes.BOOL
+        # FILE_SHARE_DELETE deliberately absent; this is a real Windows lock.
+        handle = kernel.CreateFileW(str(self.prepared), 0x80000000, 3, None, 3, 0x02000000, None)
+        self.assertNotEqual(handle, ctypes.c_void_p(-1).value)
+        released = threading.Event()
+        def release():
+            kernel.CloseHandle(handle)
+            released.set()
+        original, attempts = Path.rename, []
+        def rename(source, destination):
+            if source == self.prepared:
+                attempts.append(source)
+            return original(source, destination)
+        timer = threading.Timer(.25, release)
+        timer.start()
+        try:
+            with patch.object(Path, 'rename', rename):
+                transaction.commit(self.target, self.prepared, self.backup)
+        finally:
+            timer.join(timeout=3)
+            if not released.is_set():
+                timer.cancel()
+                release()
+        self.assertGreaterEqual(len(attempts), 2)
+        self.assertEqual((self.target / 'OKDEV.exe').read_bytes(), b'new')
+        self.assertEqual((self.backup / 'OKDEV.exe').read_bytes(), b'old')
 
     def test_changed_backup_never_replaces_missing_target(self):
         self.journal()

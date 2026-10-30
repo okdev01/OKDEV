@@ -3,6 +3,9 @@ import json
 import os
 import stat
 import zipfile
+import tempfile
+import shutil
+from contextlib import ExitStack
 from pathlib import Path
 
 from . import library
@@ -21,7 +24,7 @@ def _read(backup_id):
         library.validate_metadata(item)
         library.mod_folder(item)
         payload = folder / 'mod'
-        if not payload.is_dir() or payload.resolve() != folder.resolve() / 'mod':
+        if not payload.exists() or payload.resolve() != folder.resolve() / 'mod':
             raise ValueError()
         return folder, item
     except (OSError, ValueError, TypeError, KeyError):
@@ -30,6 +33,8 @@ def _read(backup_id):
 
 def _files(folder):
     payload = folder / 'mod'
+    if payload.is_file():
+        return [payload], payload.stat().st_size
     files, total = [], 0
     for directory, names, filenames in os.walk(payload, followlinks=False):
         for name in names + filenames:
@@ -62,8 +67,18 @@ def export(backup_id, destination):
     destination = Path(destination)
     if destination.suffix.lower() not in ('.fantome', '.zip'):
         raise ValueError('Yedeği .fantome veya .zip uzantısıyla kaydet.')
-    with library.mutation_lock():
+    with library.mutation_lock(), ExitStack() as stack:
         folder, item = _read(backup_id)
+        if (folder / 'mod').is_file():
+            # Legacy archives are preserved verbatim in recovery storage; unpack
+            # a disposable copy only when exporting a standard ZIP package.
+            temporary = Path(stack.enter_context(tempfile.TemporaryDirectory()))
+            source = temporary / ('source' + Path(item['folder_name']).suffix)
+            shutil.copy2(folder / 'mod', source)
+            library.validate_archive(source)
+            from utils.core.safe_extract import extract_mod_archive
+            extract_mod_archive(source, temporary / 'mod')
+            folder = temporary
         files, _ = _files(folder)
         data_root = library.get_user_data_dir().resolve()
         if destination.resolve().is_relative_to(data_root):

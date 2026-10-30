@@ -71,7 +71,8 @@ class SmartSkinDownloader:
         self._wait_for_rate_limit()
         
         try:
-            response = self.session.get(url, timeout=RATE_LIMIT_REQUEST_TIMEOUT, **kwargs)
+            kwargs.setdefault('timeout', RATE_LIMIT_REQUEST_TIMEOUT)
+            response = self.session.get(url, **kwargs)
             self._handle_rate_limit_response(response)
             response.raise_for_status()
             return response

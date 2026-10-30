@@ -21,9 +21,9 @@ log = get_logger()
 
 class PhaseThread(threading.Thread):
     """Thread for monitoring game phase changes"""
-    
+
     INTERESTING = INTERESTING_PHASES
-    
+
     def __init__(
         self,
         lcu: LCU,
@@ -62,7 +62,7 @@ class PhaseThread(threading.Thread):
                 self.lcu.refresh_if_needed()
             except (OSError, ConnectionError) as e:
                 log.debug(f"LCU refresh failed in phase thread: {e}")
-            
+
             ph = self.lcu.phase if self.lcu.ok else None
 
             # A client restart OKDEV's loader deferred (the client wasn't ready,
@@ -76,18 +76,18 @@ class PhaseThread(threading.Thread):
 
             if ph == "None":
                 ph = None
-            
+
             # If phase is unknown (None), skip handling.
             # Use a grace period to avoid wiping Swiftplay state on transient
             # API hiccups (the LCU can briefly return None during transitions).
             if ph is None:
                 from threads.handlers.champ_select_reset import note_phase_for_reset
                 note_phase_for_reset(self.state, None)
-                self.state.phase = None
                 self._null_phase_streak += 1
 
                 # Only clean up after several consecutive None polls (~1.5-2.5 s)
                 if self._null_phase_streak >= 3:
+                    self.state.phase = None
                     if self.state.is_swiftplay_mode:
                         # Swiftplay flag is still set but LCU returned None for
                         # several polls — the session is gone.  Full cleanup.
@@ -102,6 +102,10 @@ class PhaseThread(threading.Thread):
 
             self._null_phase_streak = 0
             phase_changed = (ph != self.last_phase)
+            # A transient failed poll clears the shared phase, but isn't a
+            # game phase transition. Restore it even when last_phase matches.
+            if self.state.phase is None:
+                self.state.phase = ph
 
             if ph == "Lobby":
                 self.lobby_processor.process_lobby_state(force=phase_changed)

@@ -8,7 +8,11 @@ Falls back to shutil.copytree when junctions are unavailable.
 
 import os
 import shutil
+import tempfile
 import stat
+import hashlib
+import re
+import time
 from pathlib import Path
 from typing import Union
 
@@ -16,6 +20,7 @@ from utils.core.logging import get_logger
 from utils.core.safe_extract import MOD_ARCHIVE_SUFFIXES, extract_mod_archive
 
 log = get_logger()
+_cache_sweeps = {}
 
 
 # ---------------------------------------------------------------------------
@@ -61,11 +66,15 @@ def create_junction(source: Path, link: Path) -> bool:
         return True
     except Exception as exc:
         log.warning(f"[JUNCTION] CreateJunction failed ({exc}), falling back to copytree")
+        link.parent.mkdir(parents=True, exist_ok=True)
+        temporary = Path(tempfile.mkdtemp(prefix='.copy-', dir=link.parent))
         try:
-            shutil.copytree(source, link, dirs_exist_ok=True)
+            shutil.copytree(source, temporary, dirs_exist_ok=True)
+            temporary.rename(link)
             log.info(f"[JUNCTION] Fallback copytree: {source} -> {link}")
-        except Exception as copy_exc:
-            log.error(f"[JUNCTION] Fallback copytree also failed: {copy_exc}")
+        finally:
+            if temporary.exists():
+                safe_remove_entry(temporary, strict=True)
         return False
 
 
@@ -73,7 +82,7 @@ def create_junction(source: Path, link: Path) -> bool:
 # Removal
 # ---------------------------------------------------------------------------
 
-def safe_remove_entry(path: Union[str, Path]) -> None:
+def safe_remove_entry(path: Union[str, Path], *, strict: bool = False) -> None:
     """Remove *path* safely, handling junctions and regular dirs/files.
 
     * **Junction / symlink**: removed with ``os.rmdir`` which deletes the
@@ -88,23 +97,35 @@ def safe_remove_entry(path: Union[str, Path]) -> None:
             os.rmdir(path)  # removes junction point only
             log.debug(f"[JUNCTION] Removed junction: {path}")
         except OSError as exc:
+            if strict:
+                raise
             log.warning(f"[JUNCTION] Failed to remove junction {path}: {exc}")
         return
 
     if path.is_dir():
-        shutil.rmtree(path, ignore_errors=True)
+        shutil.rmtree(path, ignore_errors=not strict)
+        if strict and path.exists():
+            raise OSError(f"Could not remove {path}")
         return
 
     if path.exists():
         try:
             path.unlink()
         except OSError:
+            if strict:
+                raise
             pass
 
 
 # ---------------------------------------------------------------------------
 # Cache helpers for mod archives (ZIP / fantome / modpkg)
 # ---------------------------------------------------------------------------
+
+
+def staging_name(source: Path, label: str = '') -> str:
+    """Distinct storage entries must never share an overlay staging directory."""
+    identity = str(Path(source).resolve()).casefold()
+    return 'mod-' + hashlib.sha256(identity.encode('utf-8')).hexdigest()[:24]
 
 def _get_or_extract_to_cache(
     zip_path: Path,
@@ -113,46 +134,96 @@ def _get_or_extract_to_cache(
 ) -> Path:
     """Return a cached extraction of *zip_path* inside *cache_dir*.
 
-    The cache key is ``folder_name``.  The cached copy is invalidated when the
-    source file's ``mtime`` changes (e.g. the user replaces the ZIP with an
-    updated version).
+    Source identity and revision form an immutable cache key. Different paths
+    with equal archive names/timestamps cannot share extracted content, and a
+    new revision cannot overwrite a directory used by an existing junction.
     """
     cache_dir.mkdir(parents=True, exist_ok=True)
+    identity = (str(zip_path.resolve()).casefold(), archive_digest(zip_path))
+    revision = hashlib.sha256(repr(identity).encode('utf-8')).hexdigest()[:24]
+    folder_name = revision
     cached = cache_dir / folder_name
 
-    # Check mtime stamp file
+    from hub.locking import settings_lock
+    from utils.core.atomic_file import write_text_atomic
+    import tempfile
     stamp = cache_dir / f"{folder_name}.mtime"
-    try:
-        source_mtime = str(zip_path.stat().st_mtime)
-    except OSError:
-        source_mtime = ""
-
-    needs_extract = True
-    if cached.is_dir() and stamp.exists():
+    source_mtime = repr(identity)
+    with settings_lock(cache_dir / (revision + '.lock'), timeout_ms=120000):
+        if cached.is_dir() and not is_junction(cached):
+            # Directory publication is atomic and the name already includes
+            # source path + content hash. Repair old ANSI/corrupt stamps without
+            # replacing a directory an active overlay may still reference.
+            try:
+                valid_stamp = stamp.read_text(encoding='utf-8') == source_mtime
+            except (OSError, UnicodeError):
+                valid_stamp = False
+            if not valid_stamp:
+                write_text_atomic(stamp, source_mtime)
+            return cached
+        temporary = Path(tempfile.mkdtemp(prefix='.extract-', dir=cache_dir))
         try:
-            stored_mtime = stamp.read_text().strip()
-            if stored_mtime == source_mtime:
-                needs_extract = False
-                log.debug(f"[JUNCTION] Cache hit for {folder_name}")
-        except OSError:
-            pass
-
-    if needs_extract:
-        # Remove stale cache
-        if cached.exists() or is_junction(cached):
-            safe_remove_entry(cached)
-        cached.mkdir(parents=True, exist_ok=True)
-
-        log.info(f"[JUNCTION] Extracting {zip_path.name} to cache: {cached}")
-        extract_mod_archive(zip_path, cached)
-
-        # Write mtime stamp
-        try:
-            stamp.write_text(source_mtime)
-        except OSError:
-            pass
-
+            extract_mod_archive(zip_path, temporary)
+            if archive_digest(zip_path) != identity[1]:
+                raise OSError('Mod archive changed while it was being extracted')
+            if cached.exists() or is_junction(cached):
+                safe_remove_entry(cached, strict=True)
+            temporary.rename(cached)
+            write_text_atomic(stamp, source_mtime)
+        finally:
+            if temporary.exists():
+                safe_remove_entry(temporary, strict=True)
     return cached
+
+
+def archive_digest(path: Path) -> str:
+    """Content identity also detects replacements that retain Windows timestamps."""
+    with Path(path).open('rb') as stream:
+        return hashlib.file_digest(stream, 'sha256').hexdigest()
+
+
+def prune_extraction_cache(cache_dir: Path, staging_dir: Path, *, protected=(), max_bytes=2 * 1024**3, max_entries=32, max_age=7 * 86400):
+    """Remove only generated, unreferenced cache entries. Caller holds cache lock.
+
+    Active junction targets are exempt even when they exceed the quota. Never
+    traverse or delete a linked cache directory or an unrelated named folder.
+    """
+    cache_dir = Path(cache_dir)
+    if not cache_dir.is_dir() or is_junction(cache_dir):
+        return
+    base = cache_dir.resolve()
+    retained = {Path(p).resolve() for p in protected}
+    for staging in {Path(staging_dir), cache_dir.parent / 'mods'}:
+        if staging.is_dir():
+            for entry in staging.iterdir():
+                if is_junction(entry) or entry.is_symlink():
+                    retained.add(entry.resolve())
+    entries = []
+    for entry in cache_dir.iterdir():
+        if not re.fullmatch('[a-f0-9]{24}', entry.name) or not entry.is_dir() or is_junction(entry):
+            continue
+        if entry.resolve() != base / entry.name:
+            continue
+        size = 0
+        for directory, dirs, files in os.walk(entry, followlinks=False):
+            dirs[:] = [name for name in dirs if not is_junction(Path(directory) / name)]
+            size += sum((Path(directory) / name).lstat().st_size for name in files)
+        stamp = entry.with_suffix('.mtime')
+        used = stamp.stat().st_mtime if stamp.exists() else entry.stat().st_mtime
+        entries.append((used, entry, size, stamp))
+    total, count, now = sum(row[2] for row in entries), len(entries), time.time()
+    for used, entry, size, stamp in sorted(entries):
+        if entry.resolve() in retained:
+            continue
+        if now - used <= max_age and total <= max_bytes and count <= max_entries:
+            continue
+        # Recheck the resolved target immediately before recursive removal.
+        if is_junction(entry) or entry.resolve() != base / entry.name:
+            continue
+        safe_remove_entry(entry, strict=True)
+        stamp.unlink(missing_ok=True)
+        total -= size
+        count -= 1
 
 
 # ---------------------------------------------------------------------------
@@ -179,9 +250,19 @@ def link_or_extract(
         create_junction(source, dest)
 
     elif source.is_file() and source.suffix.lower() in MOD_ARCHIVE_SUFFIXES:
-        folder_name = source.stem
-        cached = _get_or_extract_to_cache(source, folder_name, cache_dir)
-        create_junction(cached, dest)
+        from hub.locking import settings_lock
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        with settings_lock(cache_dir / 'cache-state.lock', timeout_ms=120000):
+            cached = _get_or_extract_to_cache(source, source.stem, cache_dir)
+            create_junction(cached, dest)
+            cached.with_suffix('.mtime').touch()
+            cache_key = str(cache_dir.resolve())
+            if time.monotonic() - _cache_sweeps.get(cache_key, float('-inf')) >= 60:
+                try:
+                    prune_extraction_cache(cache_dir, dest.parent, protected=[cached])
+                except OSError as exc:
+                    log.warning(f'[JUNCTION] Cache cleanup deferred: {exc}')
+                _cache_sweeps[cache_key] = time.monotonic()
 
     elif source.is_file():
         dest.mkdir(parents=True, exist_ok=True)
@@ -189,4 +270,4 @@ def link_or_extract(
         log.info(f"[JUNCTION] Copied file: {source.name} -> {dest}")
 
     else:
-        log.warning(f"[JUNCTION] Source does not exist: {source}")
+        raise FileNotFoundError(f'Mod source does not exist: {source}')

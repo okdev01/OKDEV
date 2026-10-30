@@ -17,7 +17,7 @@ log = get_logger()
 
 class ChampThread(threading.Thread):
     """Thread for monitoring champion hover and lock"""
-    
+
     def __init__(self, lcu: LCU, state: SharedState, interval: float = CHAMP_POLL_INTERVAL, injection_manager=None, skin_scraper=None):
         super().__init__(daemon=True)
         self.lcu = lcu
@@ -38,20 +38,20 @@ class ChampThread(threading.Thread):
         log.info(f"   To: {new_champ_label} (ID: {new_champ_id})")
         log.info("   Resetting all state for new champion...")
         log.info(separator)
-        
+
         # Reset skin state
         self.state.last_hovered_skin_key = None
         self.state.last_hovered_skin_id = None
         self.state.last_hovered_skin_slug = None
-        
+
         # Reset injection state
         self.state.injection_completed = False
         self.state.last_hover_written = False
-        
+
         # Reset locked champion state
         self.state.locked_champ_id = new_champ_id
         self.state.locked_champ_timestamp = time.time()
-        
+
         # Reset HistoricMode state so it restarts for the new champion
         try:
             self.state.historic_mode_active = False
@@ -66,13 +66,13 @@ class ChampThread(threading.Thread):
                 self.state.ui_skin_thread.clear_cache()
             except Exception as e:
                 log.error(f"[exchange] Failed to clear cache: {e}")
-        
+
         # Trigger UI hiding in main thread by setting flag
         self.state.champion_exchange_triggered = True
         log.debug("[exchange] Champion exchange flag set - main thread will hide UI")
-        
+
         # Skin names are now provided by LCU API - no need to load from Data Dragon
-        
+
         # Notify injection manager of champion exchange
         if self.injection_manager:
             try:
@@ -89,7 +89,7 @@ class ChampThread(threading.Thread):
                 ui._try_show_click_blocker()
         except Exception:
             pass
-        
+
         log.info(f"[exchange] Champion exchange complete - ready for {new_champ_label}")
 
     def _try_resolve_cached_skin_after_lock(self) -> None:
@@ -127,21 +127,21 @@ class ChampThread(threading.Thread):
                     self.last_locked_champion_id = None
                 time.sleep(CHAMP_POLL_INTERVAL)
                 continue
-            
+
             cid = self.lcu.hovered_champion_id
             if cid is None:
                 sel = self.lcu.my_selection or {}
-                try: 
+                try:
                     cid = int(sel.get("selectedChampionId") or 0) or None
-                except Exception: 
+                except Exception:
                     cid = None
-            
+
             if cid and cid != self.last_hover:
                 nm = f"champ_{cid}"
                 log.info(f"[hover:champ] {nm} (id={cid})")
                 self.state.hovered_champ_id = cid
                 self.last_hover = cid
-            
+
             # Personal lock (useful log even without WS)
             sess = self.lcu.session or {}
             try:
@@ -152,11 +152,11 @@ class ChampThread(threading.Thread):
                     for act in rnd:
                         if act.get("actorCellId") == my_cell and act.get("type") == "pick" and act.get("completed"):
                             ch = int(act.get("championId") or 0)
-                            if ch > 0: 
+                            if ch > 0:
                                 locked = ch
                 if locked:
                     # Check for champion exchange (champion ID changed but we were already locked)
-                    if (self.last_locked_champion_id is not None and 
+                    if (self.last_locked_champion_id is not None and
                         self.last_locked_champion_id != locked and
                         self.state.locked_champ_id is not None and
                         self.state.locked_champ_id != locked):
@@ -168,16 +168,16 @@ class ChampThread(threading.Thread):
                         # This is a new champion lock (first lock or re-lock of same champion)
                         nm = f"champ_{locked}"  # Use ID since we don't have database
                         log.info(f"[lock:champ] {nm} (id={locked})")
-                        
+
                         # English skin names are now loaded by LCU skin scraper
-                        
+
                         # Notify injection manager of champion lock
                         if self.injection_manager:
                             try:
                                 self.injection_manager.on_champion_locked(nm, locked, self.state.owned_skin_ids)
                             except Exception as e:
                                 log.error(f"[lock:champ] Failed to notify injection manager: {e}")
-                        
+
                         # Create chroma panel widgets on champion lock
                         chroma_selector = get_chroma_selector()
                         if chroma_selector:
@@ -186,7 +186,7 @@ class ChampThread(threading.Thread):
                                 log.debug(f"[lock:champ] Requested chroma panel creation for {nm}")
                             except Exception as e:
                                 log.error(f"[lock:champ] Failed to request chroma panel creation: {e}")
-                        
+
                     # Always update the state, even for the same champion
                     old_lock = self.last_lock
                     self.state.locked_champ_id = locked
@@ -197,14 +197,14 @@ class ChampThread(threading.Thread):
                     # Ensure we don't lose the last hovered skin due to a bridge reconnect:
                     # if we have cached hover text but no ID yet, resolve it now.
                     self._try_resolve_cached_skin_after_lock()
-                    
+
                     # Reset historic mode state for new champion lock (if champion changed)
                     if old_lock != locked:
                         self.state.historic_mode_active = False
                         self.state.historic_skin_id = None
                         self.state.historic_first_detection_done = False
                         log.debug(f"[lock:champ] Reset historic mode state for new champion lock")
-                        
+
                         # Broadcast deactivated state to JavaScript (hide flag)
                         try:
                             if self.state and hasattr(self.state, 'ui_skin_thread') and self.state.ui_skin_thread:

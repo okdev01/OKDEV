@@ -9,6 +9,8 @@ from pathlib import Path
 root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(root / 'scripts'))
 from create_update_package import app_version
+from sync_release_version import synchronize, component_metadata
+synchronize()
 version = app_version()
 app = root / 'dist/OKDEV'
 setup = root / 'setup_app'
@@ -35,7 +37,7 @@ with zipfile.ZipFile(setup / 'payload.zip', 'w', zipfile.ZIP_DEFLATED, compressl
         bundle.write(path, path.relative_to(app))
 subprocess.run([sys.executable, '-m', 'PyInstaller', '--noconfirm', '--clean', '--onefile',
     '--windowed', '--name', f'OKDEV_Setup_{version}', '--icon', str(root / 'assets/icon.ico'),
-    '--version-file', str(root / 'okdev_version.txt'), '--paths', str(root),
+    '--version-file', str(component_metadata('OKDEV-Setup', f'OKDEV_Setup_{version}.exe', 'OKDEV Kurulum')), '--paths', str(root),
     '--distpath', str(root / 'release'), '--workpath', str(root / 'build/setup'),
     '--specpath', str(setup), '--add-data', str(setup / 'payload.zip') + ';.',
     '--add-data', str(root / 'assets/icon.ico') + ';.',

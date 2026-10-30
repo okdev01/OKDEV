@@ -22,6 +22,18 @@ _MUTEX_NAME = r'Local\OKDEV-GuideCompanion'
 HOTKEYS = {'Ctrl+Shift+B': (0x0002 | 0x0004, 0x42), 'Ctrl+Shift+M': (0x0002 | 0x0004, 0x4D), 'Alt+B': (0x0001, 0x42)}
 
 
+def hotkey_command(visible, current, now=None, last_pick=None):
+    """A hotkey must give feedback even when no current build is available."""
+    value = {'id': uuid.uuid4().hex, 'created_at': time.time() if now is None else now}
+    if visible:
+        return dict(value, action='hide')
+    if current.get('pick'):
+        return dict(value, action='show', pick=current['pick'])
+    if last_pick:
+        return dict(value, action='show', pick=last_pick)
+    return dict(value, action='explain', phase=current.get('phase'))
+
+
 def window_rectangle(area, position, size='normal'):
     left, top, right, bottom = area
     wanted_width, wanted_height = {'compact': (400, 560), 'normal': (470, 720), 'wide': (600, 800)}.get(size, (470, 720))
@@ -35,7 +47,7 @@ def status():
     timestamp = value.get('updated_at')
     if type(timestamp) not in (int, float) or not 0 <= time.time() - timestamp < 15:
         return {'running': False, 'visible': False, 'hotkey_ok': False, 'error': ''}
-    return {key: value.get(key) for key in ('running', 'visible', 'hotkey_ok', 'hotkey', 'error')}
+    return {key: value.get(key) for key in ('running', 'visible', 'hotkey_ok', 'hotkey', 'error', 'last_hotkey_at', 'last_hotkey_action')}
 
 
 def ensure_running():
@@ -80,6 +92,7 @@ class WindowState:
     def __init__(self):
         self.visible = False
         self.url = None
+        self.last_pick = None
         self.title = 'OKDEV · Oyun rehberi'
         self.command_ids = deque(maxlen=128)
 
@@ -97,6 +110,14 @@ class WindowState:
         if action == 'hide':
             self.visible = False
             return [('hide', None)]
+        if action == 'explain':
+            self.url = None  # A later real pick must replace this local page.
+            self.visible = True
+            self.title = 'OKDEV · Oyun rehberi'
+            message = ('Maçtaki şampiyon bilgisi henüz alınamadı. OKDEV ayarlarındaki rehber bölümünden şampiyonunu elle seçebilirsin.'
+                       if value.get('phase') in guides.GAME_PHASES else
+                       'Henüz kilitlenmiş bir şampiyon yok. Şampiyonunu kilitle veya OKDEV rehber bölümünden elle seç.')
+            return [('explain', message), ('show', None)]
         if action not in ('prepare', 'show', 'toggle'):
             return []
         pick = value.get('pick')
@@ -105,6 +126,7 @@ class WindowState:
             url = guides.build_url(champion_id, pick.get('role', ''))
         except (KeyError, TypeError, ValueError):
             return []
+        self.last_pick = {'champion': {'id': champion_id}, 'role': pick.get('role', '')}
         events = []
         if url != self.url:
             self.url = url
@@ -232,6 +254,8 @@ def run():
         last_status = 0
         last_position = None
         last_hotkey = None
+        last_hotkey_at = None
+        last_hotkey_action = None
         failure = ''
         try:
             if not window.events.loaded.wait(25):
@@ -254,11 +278,9 @@ def run():
                     last_position = layout
                 value = library.read_json(library.root() / 'companion-command.json', {})
                 if hotkey.pressed():
-                    current = guides.read_state()
-                    if machine.visible:
-                        value = {'id': uuid.uuid4().hex, 'action': 'hide', 'created_at': time.time()}
-                    elif current.get('pick'):
-                        value = {'id': uuid.uuid4().hex, 'action': 'show', 'pick': current['pick'], 'created_at': time.time()}
+                    value = hotkey_command(machine.visible, guides.read_state(), last_pick=machine.last_pick)
+                    last_hotkey_at = value['created_at']
+                    last_hotkey_action = value['action']
                 for event, payload in machine.apply(value):
                     if event == 'navigate':
                         window.load_url(payload)
@@ -267,6 +289,10 @@ def run():
                         install_navigation()
                         position_window(hwnd, *layout)
                         user32.ShowWindow(hwnd, 4)  # SW_SHOWNOACTIVATE
+                    elif event == 'explain':
+                        import html
+                        window.load_html('<html lang="tr"><meta charset="utf-8"><body style="background:#11131c;color:#ddd;font:16px Segoe UI;padding:32px"><h2>Oyun rehberi</h2><p>' + html.escape(payload) + '</p><p>' + html.escape(prefs['mobalytics_hotkey']) + ' ile gizle.</p></body></html>')
+                        window.set_title(machine.title)
                     elif event == 'hide':
                         user32.ShowWindow(hwnd, 0)
                     elif event == 'quit':
@@ -275,6 +301,7 @@ def run():
                     library.write_json(library.root() / 'companion-status.json', {
                         'running': True, 'visible': machine.visible, 'hotkey_ok': hotkey_ok,
                         'hotkey': prefs['mobalytics_hotkey'], 'updated_at': time.time(),
+                        'last_hotkey_at': last_hotkey_at, 'last_hotkey_action': last_hotkey_action,
                         'error': '' if hotkey_ok else 'Kısayol başka bir uygulama tarafından kullanılıyor. Ayarlardan değiştir.'})
                     last_status = time.time()
         except Exception:

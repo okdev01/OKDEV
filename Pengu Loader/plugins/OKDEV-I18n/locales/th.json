@@ -185,5 +185,15 @@
   "Administrator privileges are required to enable auto-start.": "ต้องใช้สิทธิ์ผู้ดูแลระบบเพื่อเปิดการเริ่มอัตโนมัติ",
   "Administrator privileges are required to disable auto-start.": "ต้องใช้สิทธิ์ผู้ดูแลระบบเพื่อปิดการเริ่มอัตโนมัติ",
   "Failed to enable auto-start: {error}": "เปิดการเริ่มอัตโนมัติไม่สำเร็จ: {error}",
-  "Failed to disable auto-start: {error}": "ปิดการเริ่มอัตโนมัติไม่สำเร็จ: {error}"
+  "Failed to disable auto-start: {error}": "ปิดการเริ่มอัตโนมัติไม่สำเร็จ: {error}",
+  "Connection lost. Reopen OKDEV and try again.": "การเชื่อมต่อขาดหาย เปิด OKDEV ใหม่แล้วลองอีกครั้ง",
+  "No response received. Check the connection before saving again.": "ไม่ได้รับการตอบกลับ ตรวจสอบการเชื่อมต่อก่อนบันทึกอีกครั้ง",
+  "Mod imported: {name}": "นำเข้าม็อดแล้ว: {name}",
+  "Reload list": "โหลดรายการใหม่",
+  "Operation failed": "ดำเนินการไม่สำเร็จ",
+  "No response received. Reload the list to check the result.": "ไม่ได้รับการตอบกลับ โหลดรายการใหม่เพื่อตรวจสอบผลลัพธ์",
+  "Game path is valid": "เส้นทางเกมถูกต้อง",
+  "Game path is invalid": "เส้นทางเกมไม่ถูกต้อง",
+  "Validating game path…": "กำลังตรวจสอบเส้นทางเกม…",
+  "Support": "ช่วยเหลือ"
 }

@@ -6,8 +6,7 @@
  */
 (function initSettingsPanel() {
   const LOG_PREFIX = "[OKDEV-SettingsPanel]";
-  const DISCORD_INVITE_URL = "https://github.com/okdev01/OKDEV/issues";
-  const KOFI_URL = "https://github.com/okdev01/OKDEV";
+  const SUPPORT_URL = "https://github.com/okdev01/OKDEV/issues";
   const GITHUB_URL = "https://github.com/okdev01/OKDEV";
 
   const PANEL_ID = "okdev-settings-panel";
@@ -20,14 +19,6 @@
       : text.replace(/\{(\w+)\}/g, (m, k) => (vars && k in vars ? String(vars[k]) : m));
   // A finished English text from OKDEV (error message...), translated when it is a known one
   const tAny = (text) => (window.OKDEVI18n ? window.OKDEVI18n.tAny(text) : text);
-
-  // Codes the language picker shows, like the flags of a language menu
-  const LANGUAGE_BADGES = {
-    en: "GB", fr: "FR", de: "DE", es_ES: "ES", es_MX: "MX", pt_BR: "BR", it: "IT",
-    pl: "PL", ro: "RO", hu: "HU", cs: "CZ", el: "GR", ru: "RU", tr: "TR", ar: "AE",
-    ja: "JP", ko: "KR", zh_CN: "CN", zh_TW: "TW", th: "TH", vi: "VN", id: "ID",
-  };
-  const languageBadge = (language) => LANGUAGE_BADGES[language] || String(language || "").slice(0, 2).toUpperCase();
 
   /**
    * Escape HTML special characters to prevent XSS (CWE-79)
@@ -42,6 +33,150 @@
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#039;');
+  }
+
+  function createActionButton() {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "okdev-client-button";
+    return button;
+  }
+
+  function topOwnedDialog() {
+    return [...document.querySelectorAll('[data-okdev-dialog]')].filter(node => node.isConnected)
+      .sort((a, b) => (Number(getComputedStyle(a).zIndex) || 0) - (Number(getComputedStyle(b).zIndex) || 0)).pop();
+  }
+
+  function dialogControls(dialog) {
+    return [...dialog.querySelectorAll('button, input, select, textarea, a[href], [tabindex]')]
+      .filter(node => !node.disabled && node.tabIndex >= 0 && node.getClientRects().length &&
+        getComputedStyle(node).visibility !== 'hidden' && !node.closest('[inert]'));
+  }
+
+  function prepareOwnedDialog(dialog, label, onClose) {
+    dialog.dir = window.OKDEVI18n?.direction === 'rtl' ? 'rtl' : 'ltr';
+    dialog.dataset.okdevDialog = 'true';
+    dialog.setAttribute('role', 'dialog');
+    dialog.setAttribute('aria-modal', 'true');
+    dialog.setAttribute('aria-label', t(label));
+    dialog.tabIndex = -1;
+    dialog._returnFocus = document.activeElement;
+    dialog._dismiss = onClose || (() => removeOwnedDialog(dialog));
+    queueMicrotask(() => {
+      if (!dialog.isConnected || topOwnedDialog() !== dialog) return;
+      syncOwnedDialogs();
+      const target = dialog.querySelector('input[type="search"], input[type="text"]') || dialogControls(dialog)[0] || dialog;
+      target.focus();
+    });
+  }
+
+  function syncOwnedDialogs() {
+    const top = topOwnedDialog();
+    document.querySelectorAll('[data-okdev-dialog]').forEach(node => {
+      node.inert = node !== top;
+      if (node !== top) node.setAttribute('aria-hidden', 'true');
+      else node.removeAttribute('aria-hidden');
+    });
+  }
+
+  function removeOwnedDialog(dialog) {
+    if (!dialog) return;
+    clearTimeout(dialog._requestTimer);
+    const origin = dialog._returnFocus;
+    dialog.remove();
+    syncOwnedDialogs();
+    if (dialog.id === 'okdev-diagnostics-dialog') diagnosticsDialog = null;
+    queueMicrotask(() => {
+      const top = topOwnedDialog();
+      if (origin?.isConnected && (!top || top.contains(origin))) origin.focus();
+      else if (top && !top.contains(document.activeElement)) (dialogControls(top)[0] || top).focus();
+    });
+  }
+
+  document.addEventListener('keydown', event => {
+    const dialog = topOwnedDialog();
+    if (!dialog || event.defaultPrevented) return;
+    if (event.key === 'Escape') {
+      // A native select owns Escape while its popup is open.
+      if (event.target.tagName === 'SELECT') return;
+      event.preventDefault();
+      event.stopPropagation();
+      dialog._dismiss?.();
+    } else if (event.key === 'Tab') {
+      const controls = dialogControls(dialog), first = controls[0], last = controls.at(-1);
+      if (!first) { event.preventDefault(); dialog.focus(); }
+      else if (event.shiftKey && (document.activeElement === first || !dialog.contains(document.activeElement))) {
+        event.preventDefault(); last.focus();
+      } else if (!event.shiftKey && (document.activeElement === last || !dialog.contains(document.activeElement))) {
+        event.preventDefault(); first.focus();
+      }
+    }
+  });
+
+  function showSettingsFeedback(message, error = false) {
+    const status = document.getElementById('okdev-settings-feedback');
+    if (!status) return;
+    status.dataset.error = String(error);
+    status.setAttribute('role', error ? 'alert' : 'status');
+    status.textContent = message;
+  }
+
+  function showPathStatus(kind) {
+    const status = document.getElementById('path-status');
+    if (!status) return;
+    const labels = {valid:'Game path is valid', invalid:'Game path is invalid', pending:'Validating game path…'};
+    const paths = {valid:'M5 12l4 4L19 6', invalid:'M6 6l12 12M18 6L6 18', pending:'M12 7v5l3 2'};
+    const label = labels[kind] ? t(labels[kind]) : '';
+    status.title = label;
+    status.setAttribute('aria-label', label);
+    status.dataset.state = kind;
+    status.innerHTML = paths[kind] ? `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${paths[kind]}"/></svg>` : '';
+  }
+
+  function finishManagedRequest(dialog) {
+    if (!dialog) return;
+    clearTimeout(dialog._requestTimer);
+    dialog._requestTimer = null;
+    dialog.dataset.pending = 'false';
+    dialog.setAttribute('aria-busy', 'false');
+    for (const [button, text] of dialog._pendingButtons || []) {
+      button.disabled = false;
+      button.textContent = text;
+    }
+    dialog._pendingButtons = [];
+  }
+
+  function showManagedFailure(dialog, message) {
+    const status = dialog?.querySelector('.okdev-management-feedback');
+    if (!status) return;
+    status.hidden = false;
+    status.replaceChildren(document.createTextNode(tAny(message) + ' '));
+    const retry = createActionButton();
+    retry.textContent = t('Reload list');
+    retry.addEventListener('click', () => {
+      if (dialog.id === 'champion-mods-manage-dialog') openChampionModsList(window.__okdevManageChampionId);
+      else openCategoryModsList(window.__okdevManageCategory);
+    });
+    status.appendChild(retry);
+  }
+
+  function sendManagedRequest(dialog, payload) {
+    if (!dialog || dialog.dataset.pending === 'true') return;
+    if (!bridge?.ready) {
+      showManagedFailure(dialog, t('Connection lost. Reopen OKDEV and try again.'));
+      return;
+    }
+    dialog.dataset.pending = 'true';
+    dialog.setAttribute('aria-busy', 'true');
+    dialog._pendingButtons = [...dialog.querySelectorAll('.mod-delete-button,.mod-rename-button')].map(button => [button, button.textContent]);
+    for (const [button] of dialog._pendingButtons) button.disabled = true;
+    dialog._requestTimer = setTimeout(() => {
+      if (!dialog.isConnected) return;
+      finishManagedRequest(dialog);
+      showManagedFailure(dialog, t('No response received. Reload the list to check the result.'));
+    }, 15000);
+    try { bridge.send(payload); }
+    catch (error) { finishManagedRequest(dialog); showManagedFailure(dialog, String(error)); }
   }
 
   let bridge = null;
@@ -153,15 +288,15 @@
     
     lol-uikit-flyout-frame#${FLYOUT_ID},
     #${FLYOUT_ID} {
-      min-width: 360px !important;
-      max-width: 400px !important;
+      min-width: 0 !important;
+      max-width: calc(100vw - 24px) !important;
       background: transparent !important;
       background-color: transparent !important;
       background-image: none !important;
       border-radius: 0 !important;
       padding: 0 !important;
       color: #cdbe91;
-      font-family: "Beaufort for LOL", serif;
+      font-family: "Segoe UI", sans-serif;
       display: flex !important;
       flex-direction: column !important;
       align-items: center !important;
@@ -197,6 +332,11 @@
       border: none !important;
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5) !important;
       margin: 0 !important;
+      overflow-y: auto;
+      overflow-x: hidden;
+      overscroll-behavior: contain;
+      scrollbar-width: thin;
+      scrollbar-color: #695625 #010a13;
     }
     
     #${FLYOUT_ID} .settings-title {
@@ -238,10 +378,10 @@
     }
 
     #${FLYOUT_ID} .okdev-tooltip-icon {
-      width: 14px;
-      height: 14px;
+      width: 24px;
+      height: 24px;
       background-image: url("http://127.0.0.1:${window.__okdevBridge ? window.__okdevBridge.port : 50000}/asset/tooltip.png");
-      background-size: contain;
+      background-size: 14px;
       background-repeat: no-repeat;
       background-position: center;
       opacity: 0.85;
@@ -269,7 +409,7 @@
       left: 0;
       top: 0;
       width: 340px;
-      max-width: 340px;
+      max-width: calc(100vw - 24px);
       box-sizing: border-box;
       padding: 10px 12px;
       background: #0b1a2a;
@@ -278,8 +418,7 @@
       font-size: 12px;
       line-height: 1.35;
       white-space: pre-line;
-      text-align: justify;
-      text-justify: inter-word;
+      text-align: start;
       box-shadow: 0 10px 28px rgba(0, 0, 0, 0.65);
       opacity: 0;
       visibility: hidden;
@@ -488,283 +627,6 @@
       margin-top: 0;
     }
 
-    /* Language picker: a code badge in the corner of Settings */
-    #${FLYOUT_ID} .okdev-language-picker {
-      position: absolute;
-      top: 50%;
-      right: 0;
-      transform: translateY(-50%);
-      z-index: 5;
-    }
-    #${FLYOUT_ID} .okdev-language-badge {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      height: 22px;
-      padding: 0 8px;
-      background: #1e2328;
-      border: 1px solid #785a28;
-      color: #cdbe91;
-      font-family: "Beaufort for LOL", serif;
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: 0.1em;
-      cursor: pointer;
-      transition: border-color 0.2s, color 0.2s;
-    }
-    #${FLYOUT_ID} .okdev-language-badge::after {
-      content: "";
-      width: 4px;
-      height: 4px;
-      border-right: 1px solid currentColor;
-      border-bottom: 1px solid currentColor;
-      transform: translateY(-2px) rotate(45deg);
-    }
-    #${FLYOUT_ID} .okdev-language-badge:hover,
-    #${FLYOUT_ID} .okdev-language-picker.open .okdev-language-badge {
-      border-color: #c8aa6e;
-      color: #f0e6d2;
-    }
-    /* The list opens in <body>, above the Settings panel (z-index 10000-10001) */
-    .okdev-language-menu {
-      position: fixed;
-      z-index: 10050;
-      width: 230px;
-      max-height: 300px;
-      overflow-y: auto;
-      padding: 4px 0;
-      background: #010a13;
-      border: 1px solid #785a28;
-      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.7);
-      box-sizing: border-box;
-    }
-    .okdev-language-menu::-webkit-scrollbar {
-      width: 6px;
-    }
-    .okdev-language-menu::-webkit-scrollbar-thumb {
-      background: #785a28;
-    }
-    .okdev-language-menu .okdev-language-item {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 6px 12px;
-      color: #a09b8c;
-      font-family: "Beaufort for LOL", serif;
-      font-size: 12px;
-      text-align: left;
-      cursor: pointer;
-    }
-    .okdev-language-menu .okdev-language-item:hover {
-      background: rgba(200, 170, 110, 0.1);
-      color: #f0e6d2;
-    }
-    .okdev-language-menu .okdev-language-item.selected {
-      background: rgba(200, 170, 110, 0.16);
-      color: #f0e6d2;
-    }
-    .okdev-language-menu .okdev-language-code {
-      flex: 0 0 34px;
-      color: #c8aa6e;
-      font-size: 10px;
-      font-weight: 700;
-      letter-spacing: 0.1em;
-    }
-    
-    /* Style for the "Add custom mods" dropdown button - match League UI button styling */
-    #add-custom-mods-dropdown {
-      background: #1E2328 !important;
-      background-color: #1E2328 !important;
-      color: #c8aa6e !important;
-      font-family: "Beaufort for LOL", serif !important;
-      pointer-events: all !important;
-      position: relative !important;
-      display: flex !important;
-      align-items: center !important;
-      justify-content: center !important;
-      box-sizing: border-box !important;
-      min-width: 90px !important;
-      height: 100% !important;
-      min-height: 32px !important;
-      cursor: pointer !important;
-      -webkit-user-select: none !important;
-      text-align: center !important;
-      transition: background 0.2s !important;
-      z-index: 10003 !important;
-    }
-    
-    /* Ensure dropdown menu appears above other elements */
-    #add-custom-mods-dropdown[class*="active"],
-    #add-custom-mods-dropdown.active {
-      z-index: 10003 !important;
-    }
-    
-    /* Dropdown menu options container */
-    #add-custom-mods-dropdown ~ *,
-    #add-custom-mods-dropdown .lol-uikit-dropdown-menu,
-    #add-custom-mods-dropdown [role="listbox"] {
-      z-index: 10003 !important;
-    }
-    
-    /* Remove any blue colors or unwanted backgrounds from child elements, but keep dropdown background */
-    #add-custom-mods-dropdown > * {
-      background: transparent !important;
-      background-color: transparent !important;
-    }
-    
-    /* Ensure dropdown itself and pseudo-elements maintain background */
-    #add-custom-mods-dropdown,
-    #add-custom-mods-dropdown::before,
-    #add-custom-mods-dropdown::after {
-      background: #1E2328 !important;
-      background-color: #1E2328 !important;
-      background-image: none !important;
-      opacity: 1 !important;
-    }
-    
-    /* Hover effect - no transparency */
-    #add-custom-mods-dropdown:hover,
-    #add-custom-mods-dropdown:hover::before,
-    #add-custom-mods-dropdown:hover::after {
-      background: #1E2328 !important;
-      background-color: #1E2328 !important;
-      opacity: 1 !important;
-    }
-    
-    /* Remove focus/active blue colors and shining effects */
-    #add-custom-mods-dropdown:focus,
-    #add-custom-mods-dropdown:active,
-    #add-custom-mods-dropdown:focus-visible,
-    #add-custom-mods-dropdown:focus-within {
-      background: #1E2328 !important;
-      background-color: #1E2328 !important;
-      outline: none !important;
-      box-shadow: none !important;
-      border: none !important;
-    }
-    
-    /* Remove any glow or shine effects */
-    #add-custom-mods-dropdown:focus::before,
-    #add-custom-mods-dropdown:focus::after,
-    #add-custom-mods-dropdown:active::before,
-    #add-custom-mods-dropdown:active::after {
-      display: none !important;
-      box-shadow: none !important;
-    }
-    
-    /* Remove all glow effects including filters, transforms, and shadows */
-    #add-custom-mods-dropdown:focus,
-    #add-custom-mods-dropdown:active,
-    #add-custom-mods-dropdown:focus-visible,
-    #add-custom-mods-dropdown:focus-within,
-    #add-custom-mods-dropdown:focus *,
-    #add-custom-mods-dropdown:active * {
-      filter: none !important;
-      -webkit-filter: none !important;
-      transform: none !important;
-      -webkit-transform: none !important;
-      box-shadow: none !important;
-      text-shadow: none !important;
-      outline: none !important;
-      border-color: transparent !important;
-    }
-    
-    /* Blur focus after click */
-    #add-custom-mods-dropdown {
-      outline: none !important;
-    }
-    
-    /* Don't center dropdown menu options */
-    #add-custom-mods-dropdown .framed-dropdown-type {
-      text-align: left !important;
-    }
-    
-    /* Hide placeholder option from dropdown menu (but keep it for header display) */
-    #add-custom-mods-dropdown[class*="active"] .placeholder-option,
-    #add-custom-mods-dropdown.active .placeholder-option {
-      display: none !important;
-    }
-    
-    /* Force placeholder to always be selected for display */
-    #add-custom-mods-dropdown .placeholder-option {
-      display: block !important;
-    }
-    
-    /* Ensure placeholder text is always shown in header */
-    #add-custom-mods-dropdown:not([class*="active"]) .placeholder-option {
-      display: block !important;
-    }
-    
-    /* Hide checkmark icons in dropdown */
-    #add-custom-mods-dropdown lol-uikit-dropdown-option::after,
-    #add-custom-mods-dropdown lol-uikit-dropdown-option::before,
-    #add-custom-mods-dropdown .framed-dropdown-type::after,
-    #add-custom-mods-dropdown .framed-dropdown-type::before,
-    #add-custom-mods-dropdown lol-uikit-dropdown-option [class*="check"],
-    #add-custom-mods-dropdown lol-uikit-dropdown-option [class*="icon"],
-    #add-custom-mods-dropdown lol-uikit-dropdown-option [class*="selected"] {
-      display: none !important;
-      visibility: hidden !important;
-      opacity: 0 !important;
-    }
-    
-    /* Override :host .ui-dropdown color to match button contrast */
-    #add-custom-mods-dropdown .ui-dropdown {
-      color: #CDBE91 !important;
-      font-size: 12px !important;
-      font-weight: normal !important;
-      line-height: 16px !important;
-      letter-spacing: 0.025em !important;
-      -webkit-font-smoothing: subpixel-antialiased !important;
-    }
-    
-    /* Target shadow DOM content via part or direct selector */
-    #add-custom-mods-dropdown::part(content),
-    #add-custom-mods-dropdown .ui-dropdown-current-content,
-    #add-custom-mods-dropdown .ui-dropdown-current-content.shadow {
-      color: #CDBE91 !important;
-    }
-
-    /* Manage custom mods dropdown - same visual style as add-custom-mods-dropdown */
-    #manage-custom-mods-dropdown {
-      background: #1E2328 !important;
-      background-color: #1E2328 !important;
-      color: #c8aa6e !important;
-      font-family: "Beaufort for LOL", serif !important;
-      pointer-events: all !important;
-      position: relative !important;
-      display: flex !important;
-      align-items: center !important;
-      justify-content: center !important;
-      box-sizing: border-box !important;
-      min-width: 90px !important;
-      height: 100% !important;
-      min-height: 32px !important;
-      cursor: pointer !important;
-      -webkit-user-select: none !important;
-      text-align: center !important;
-      transition: background 0.2s !important;
-      z-index: 10001 !important;
-      outline: none !important;
-    }
-    #manage-custom-mods-dropdown[class*="active"],
-    #manage-custom-mods-dropdown.active {
-      z-index: 10003 !important;
-    }
-    #manage-custom-mods-dropdown ~ *,
-    #manage-custom-mods-dropdown .lol-uikit-dropdown-menu,
-    #manage-custom-mods-dropdown [role="listbox"] {
-      z-index: 10003 !important;
-    }
-    #manage-custom-mods-dropdown,
-    #manage-custom-mods-dropdown::before,
-    #manage-custom-mods-dropdown::after {
-      background: #1E2328 !important;
-      background-color: #1E2328 !important;
-      background-image: none !important;
-      opacity: 1 !important;
-    }
-
     /* Delete button in the manage-mods list rows */
     #${FLYOUT_ID} .mod-delete-button,
     .mod-delete-button {
@@ -918,8 +780,10 @@
     #add-custom-mods-flyout,
     #champion-selection-flyout,
     #skin-selection-flyout {
-      min-width: 600px !important;
-      max-width: 800px !important;
+      min-width: 0 !important;
+      width: min(700px, calc(100vw - 24px)) !important;
+      max-width: calc(100vw - 24px) !important;
+      max-height: calc(100vh - 24px) !important;
       background: transparent !important;
       background-color: transparent !important;
       background-image: none !important;
@@ -939,7 +803,7 @@
     }
 
     #skin-selection-flyout {
-      min-width: 700px !important;
+      height: min(640px, calc(100vh - 24px)) !important;
     }
 
     #champion-selection-flyout::-webkit-scrollbar,
@@ -979,11 +843,13 @@
       border-radius: 0 !important;
       padding: 20px !important;
       width: 100% !important;
+      max-height: calc(100vh - 24px) !important;
       box-sizing: border-box !important;
       border: 1px solid #c8aa6e !important;
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5) !important;
       margin: 0 !important;
       overflow-x: hidden !important;
+      overflow-y: auto;
     }
     
     #champion-selection-dialog,
@@ -1039,6 +905,10 @@
       width: 100%;
       margin-bottom: 16px;
       position: relative;
+      min-height: 32px;
+      flex: 0 0 auto;
+      box-sizing: border-box;
+      padding-inline: 36px;
     }
 
     .back-button {
@@ -1075,6 +945,8 @@
     
     .dialog-title-wrapper {
       flex: 1;
+      min-width: 0;
+      overflow-wrap: anywhere;
       text-align: center;
       font-size: 18px;
       font-weight: bold;
@@ -1161,13 +1033,13 @@
 
     #skins-list {
       flex: 1 1 auto;
-      min-height: 0;
+      min-height: 120px !important;
       max-height: none;
     }
 
     #skins-list .skins-list-container {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(min(150px, 100%), 1fr));
       gap: 10px;
       padding-right: 8px;
     }
@@ -1206,10 +1078,43 @@
     .skin-card-front {
       z-index: 2;
     }
+    .skin-target {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      height: 100%;
+      min-height: 0;
+      padding: 0;
+      border: 0;
+      background: #101923;
+      color: inherit;
+      cursor: pointer;
+    }
+    .skin-target .skin-placeholder {
+      position: absolute;
+      width: 64px;
+      height: 80px;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      fill: none;
+      stroke: #c8aa6e;
+      stroke-width: 2;
+      opacity: .4;
+      pointer-events: none;
+    }
+    .skin-target img, .skin-target .skin-name { position: relative; }
+    .skin-target .skin-name { margin-top: auto; background: #1e2328; width: 100%; box-sizing: border-box; }
+    .skin-card .skin-target:focus-visible {
+      outline: 2px solid #f0e6d2;
+      outline-offset: -3px;
+    }
     .skin-card-back {
       z-index: 1;
       pointer-events: none;
     }
+    .skin-card-face[inert] { visibility: hidden; }
     .skin-card.is-flipped .skin-card-front {
       z-index: 1;
       pointer-events: none;
@@ -1264,7 +1169,7 @@
       padding: 4px 7px;
       border: 1px solid rgba(200, 170, 110, 0.8);
       border-radius: 3px;
-      background: rgba(10, 10, 13, 0.86);
+      background: #0a0a0d;
       color: #c8aa6e;
       cursor: pointer;
       font-family: "Beaufort for LOL", serif;
@@ -1288,6 +1193,12 @@
       font-size: 11px;
       font-weight: bold;
     }
+    .skin-card-back-header > span {
+      min-width: 0;
+      overflow-wrap: anywhere;
+      background: #1e2328;
+    }
+    .skin-card.selected .skin-card-back-header > span { background: #2b2a20; }
     .skin-card-back-close {
       position: relative;
       z-index: 1;
@@ -1356,6 +1267,7 @@
     }
     #skin-selection-actions {
       display: flex;
+      flex-wrap: wrap;
       align-items: center;
       gap: 12px;
       margin-top: 12px;
@@ -1370,6 +1282,8 @@
       font-size: 13px;
     }
     #skin-selection-confirm {
+      max-width: 100%;
+      white-space: normal;
       padding: 9px 18px;
       border: 1px solid #c8aa6e;
       border-radius: 3px;
@@ -1386,6 +1300,116 @@
     #skin-selection-confirm:disabled {
       opacity: 0.45;
       cursor: default;
+    }
+    .okdev-client-button {
+      box-sizing: border-box;
+      min-height: 36px;
+      padding: 8px 14px;
+      border: 1px solid #695625;
+      border-radius: 4px;
+      background: #111d2a;
+      color: #e0d1ad;
+      font: 600 13px/1.3 "Segoe UI", sans-serif;
+      cursor: pointer;
+    }
+    .okdev-client-button:hover:not(:disabled) { background: #253141; border-color: #c8aa6e; }
+    .okdev-client-button:disabled { opacity: .55; cursor: wait; }
+    .okdev-management-feedback { color: #ffb5ba; background: #010a13; font: 13px/1.5 "Segoe UI", sans-serif; overflow-wrap: anywhere; margin: 10px 0; }
+    .okdev-management-feedback .okdev-client-button { margin-top: 8px; }
+    .okdev-client-button:focus-visible,
+    #${FLYOUT_ID} select:focus-visible,
+    [data-okdev-dialog] button:focus-visible,
+    [data-okdev-dialog] input:focus-visible {
+      outline: 2px solid #e0bd76;
+      outline-offset: 3px;
+    }
+    #${FLYOUT_ID} .okdev-settings-header {
+      display: grid !important;
+      grid-template-columns: minmax(0, 1fr) auto 32px;
+      gap: 10px !important;
+      align-items: center !important;
+      width: 100%;
+      padding-bottom: 16px;
+      margin-bottom: 16px !important;
+      border-bottom: 1px solid #3a3429;
+      position: sticky !important;
+      top: -20px;
+      padding-top: 12px;
+      background: #010a13;
+      z-index: 3;
+    }
+    #${FLYOUT_ID} .okdev-settings-header .settings-title {
+      text-align: start;
+      white-space: nowrap;
+      font: 700 22px/1.2 "Beaufort for LOL", "Segoe UI", sans-serif;
+    }
+    #${FLYOUT_ID} #okdev-version-badge {
+      display: block;
+      position: static !important;
+      margin: 4px 0 0 !important;
+      color: #b5b7bb !important;
+      font: 12px/1.3 "Segoe UI", sans-serif !important;
+    }
+    #${FLYOUT_ID} .okdev-panel-close { min-height: 32px; width: 32px; padding: 0; font-size: 24px; }
+    #${FLYOUT_ID} .okdev-language-select,
+    #${FLYOUT_ID} .okdev-category-select {
+      min-width: 0;
+      min-height: 38px;
+      padding: 8px 7px;
+      border: 1px solid #695625;
+      border-radius: 4px;
+      background: #111d2a;
+      color: #e0d1ad;
+      font: 13px/1.3 "Segoe UI", sans-serif;
+      color-scheme: dark;
+    }
+    #${FLYOUT_ID} .okdev-language-select { max-width: 135px; width: 100%; }
+    #${FLYOUT_ID} .okdev-category-select { flex: 1; width: 50%; }
+    #${FLYOUT_ID} .lol-settings-slider { width: 100% !important; direction: ltr; }
+    #${FLYOUT_ID} .settings-value { direction: ltr; unicode-bidi: isolate; }
+    #${FLYOUT_ID} .lol-settings-slider input[type="range"] { margin: 0; inset: 0; }
+    #${FLYOUT_ID} .lol-settings-slider:focus-within { outline: 2px solid #e0bd76; outline-offset: 4px; border-radius: 4px; }
+    #${FLYOUT_ID} .lol-uikit-slider-wrapper { pointer-events: none; }
+    #${FLYOUT_ID} .lol-uikit-slider-button {
+      background: #c8aa6e !important;
+      border: 7px solid #010a13;
+      box-sizing: border-box;
+      border-radius: 50%;
+    }
+    #${FLYOUT_ID} .settings-checkbox { accent-color: #c8aa6e; flex-shrink: 0; }
+    #${FLYOUT_ID} .settings-checkbox { color-scheme: dark; }
+    #${FLYOUT_ID} .settings-status { display: inline-flex; flex-shrink: 0; color: #b8b6b1; }
+    #${FLYOUT_ID} .settings-status[data-state="valid"] { color: #81e4cd; }
+    #${FLYOUT_ID} .settings-status[data-state="invalid"] { color: #ffb5ba; }
+    #${FLYOUT_ID} .okdev-tools-row { width:100%; display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:12px; }
+    #${FLYOUT_ID} .okdev-tools-row button { margin:0 !important; min-width:0; }
+    #${FLYOUT_ID} #pengu-ui-button { grid-column:1 / -1; }
+    #${FLYOUT_ID} .settings-checkbox-wrapper { cursor: pointer; color: #ddd4bf; line-height: 1.4; }
+    #${FLYOUT_ID} .settings-section { margin-bottom: 18px; }
+    #${FLYOUT_ID} .settings-label { line-height: 1.45; margin-bottom: 4px; color: #ddd4bf; }
+    #${FLYOUT_ID} .settings-input { background: #111d2a; color: #edf2fa; font: 13px/1.4 "Segoe UI", sans-serif; }
+    #${FLYOUT_ID} #save-button { background: #c8aa6e; color: #151c26; width: 100%; margin-top: 16px !important; }
+    #${FLYOUT_ID} .settings-links { gap: 10px; flex-wrap: wrap; }
+    #${FLYOUT_ID} .settings-link { font-size: 12px; }
+    #${FLYOUT_ID} .okdev-save-status { width: 100%; margin: 10px 0 0; color: #b7d9c9; font: 12px/1.5 "Segoe UI", sans-serif; overflow-wrap: anywhere; }
+    #${FLYOUT_ID} .okdev-save-status[data-error="true"] { color: #ffb5ba; }
+    #champion-selection-flyout, #skin-selection-flyout,
+    #champion-mods-manage-dialog > .flyout, #category-mods-manage-dialog > .flyout,
+    #rename-mod-dialog > .flyout, #delete-mod-confirm-dialog > .flyout {
+      max-width: calc(100vw - 24px) !important;
+      max-height: calc(100vh - 24px) !important;
+    }
+    #champion-selection-flyout .lc-flyout-content, #skin-selection-flyout .lc-flyout-content {
+      width: 100% !important;
+      max-width: 100%;
+      min-height: 0;
+    }
+    #rename-mod-dialog > .flyout, #delete-mod-confirm-dialog > .flyout {
+      overflow-y: auto;
+      overflow-wrap: anywhere;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      #${FLYOUT_ID}, #okdev-global-tooltip, .okdev-warning-glow { animation: none !important; transition: none !important; }
     }
   `;
   }
@@ -1415,7 +1439,7 @@
     if (badge && payload.version) {
       badge.textContent = `v${payload.version}`;
     }
-    updateSettingsForm();
+    if (settingsPanel?.dataset.dirty !== "true") updateSettingsForm();
     // Badge count should reflect what's actually in diagnostics (and not change while dragging sliders).
     const localCount = Array.isArray(diagnosticsState.errors) ? diagnosticsState.errors.length : 0;
     if (localCount > 0) {
@@ -1436,6 +1460,8 @@
   let errorBadgeState = { hasErrors: false, count: 0 };
   let _badgeObserverStarted = false;
   let _pendingSave = null;
+  let _saveTimeout = null;
+  let _saveSequence = 0;
   let _diagnosticsPollId = null;
   let _flyoutRepositionTimer = null;
 
@@ -1778,7 +1804,7 @@
     const currentPath = pathInput.value.trim();
     if (payload.gamePath === currentPath) {
       const isValid = payload.valid === true;
-      pathStatus.textContent = isValid ? "✅" : "❌";
+      showPathStatus(isValid ? 'valid' : 'invalid');
 
       // Update current settings if this is the saved path
       if (currentPath === currentSettings.gamePath) {
@@ -1788,145 +1814,89 @@
   }
 
   function handleSettingsSaved(payload) {
-    if (payload.success) {
-      log("info", "Settings saved successfully", payload);
-      // Show success message to user
-      const saveButton = document.getElementById("save-button");
-      if (saveButton) {
-        const originalText = saveButton.textContent;
-        saveButton.textContent = t("Saved!");
-        setTimeout(() => {
-          saveButton.textContent = originalText;
-        }, 2000);
-      }
-
-      // After a successful save: if the user actually increased a value enough to satisfy the
-      // recommendation, clear all diagnostics entries from that category so they stay gone.
-      try {
-        if (_pendingSave) {
-          const cats = getResolvedCategoriesForSavedValues(_pendingSave);
-          if (cats.length > 0) {
-            if (bridge) bridge.send({ type: "diagnostics-clear-category", categories: cats });
-          }
-        }
-      } catch (e) {}
-      _pendingSave = null;
-
-      // Refresh settings + diagnostics + badges after save
-      requestSettings();
-      requestDiagnostics();
-    } else {
-      log("error", "Settings save failed", payload);
-      // Show error message to user
-      const saveButton = document.getElementById("save-button");
-      if (saveButton) {
-        const originalText = saveButton.textContent;
-        saveButton.textContent = payload.error ? tAny(payload.error) : t("Error saving settings");
-        saveButton.style.background = "#8b0000";
-        setTimeout(() => {
-          saveButton.textContent = originalText;
-          saveButton.style.background = "";
-        }, 3000);
-      }
+    if (!_pendingSave || (payload.requestId && payload.requestId !== _pendingSave.requestId)) return;
+    clearTimeout(_saveTimeout);
+    _saveTimeout = null;
+    const savedValues = _pendingSave;
+    _pendingSave = null;
+    const saveButton = document.getElementById("save-button");
+    if (saveButton) { saveButton.disabled = false; saveButton.textContent = t("Save"); }
+    if (!payload.success) {
+      showSettingsFeedback(payload.error ? tAny(payload.error) : t("Error saving settings"), true);
+      return;
     }
-  }
-
-  function validateGamePath(path) {
-    if (!path || !path.trim()) {
-      return false;
+    if (settingsPanel === savedValues.panel && (settingsPanel._revision || 0) === savedValues.revision) {
+      delete settingsPanel.dataset.dirty;
     }
-    // Basic validation - check if path contains "League of Legends"
-    // Full validation is done on Python side
-    return path.trim().length > 0;
+    showSettingsFeedback(t("Saved!"));
+    if (savedValues) {
+      const categories = getResolvedCategoriesForSavedValues(savedValues);
+      if (categories.length && bridge) bridge.send({type:"diagnostics-clear-category", categories});
+    }
+    requestSettings();
+    requestDiagnostics();
   }
 
   // Language of OKDEV's menus: a code badge in the corner of Settings, applied as soon as it is picked
   function createLanguagePicker() {
     const i18n = window.OKDEVI18n;
-    const setting = i18n.setting || "auto";
-    const languages = i18n.languages || {};
-
-    const picker = document.createElement("div");
-    picker.className = "okdev-language-picker";
-
-    const badge = document.createElement("button");
-    badge.type = "button";
-    badge.className = "okdev-language-badge";
-    badge.textContent = languageBadge(i18n.language);
-    badge.title = `${t("Language:")} ${setting === "auto" ? t("Auto (client language)") : languages[setting] || setting}`;
-    picker.appendChild(badge);
-
-    const menu = document.createElement("div");
-    menu.className = "okdev-language-menu";
-    [["auto", t("Auto (client language)")], ...Object.entries(languages)].forEach(([value, name]) => {
-      const item = document.createElement("div");
-      item.className = "okdev-language-item";
-      if (value === setting) item.classList.add("selected");
-      const code = document.createElement("span");
-      code.className = "okdev-language-code";
-      code.textContent = value === "auto" ? "AUTO" : languageBadge(value);
-      const label = document.createElement("span");
-      label.textContent = name;
-      item.append(code, label);
-      item.addEventListener("click", (e) => {
-        e.stopPropagation();
-        close();
-        if (value !== setting && bridge) bridge.send({ type: "language-save", language: value });
-      });
-      menu.appendChild(item);
-    });
-
-    const onOutside = (e) => {
-      if (!picker.contains(e.target) && !menu.contains(e.target)) close();
-    };
-    const onKey = (e) => {
-      if (e.key === "Escape") close();
-    };
-    // The list opens in <body>, above the whole panel: League's dropdowns
-    // further down the panel would cover it otherwise
-    function open() {
-      const rect = badge.getBoundingClientRect();
-      menu.style.top = `${Math.round(rect.bottom + 6)}px`;
-      menu.style.right = `${Math.round(window.innerWidth - rect.right)}px`;
-      document.body.appendChild(menu);
-      picker.classList.add("open");
-      document.addEventListener("mousedown", onOutside, true);
-      document.addEventListener("keydown", onKey, true);
-      window.addEventListener("resize", close);
-      const selected = menu.querySelector(".selected");
-      if (selected) menu.scrollTop = selected.offsetTop - (menu.clientHeight - selected.offsetHeight) / 2;
+    const picker = document.createElement("select");
+    picker.className = "okdev-language-select";
+    picker.setAttribute("aria-label", t("Language:"));
+    for (const [value, name] of [["auto", t("Auto (client language)")], ...Object.entries(i18n.languages || {})]) {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = name;
+      picker.appendChild(option);
     }
-    function close() {
-      picker.classList.remove("open");
-      menu.remove();
-      document.removeEventListener("mousedown", onOutside, true);
-      document.removeEventListener("keydown", onKey, true);
-      window.removeEventListener("resize", close);
-    }
-    badge.addEventListener("click", (e) => {
-      e.stopPropagation();
-      if (picker.classList.contains("open")) close();
-      else open();
+    picker.value = i18n.setting || "auto";
+    picker.addEventListener("change", () => {
+      if (bridge) bridge.send({type: "language-save", language: picker.value});
     });
     return picker;
   }
 
-  // The language list lives in <body>: it goes with the panel it was opened from
-  function closeLanguageMenu() {
-    document.querySelectorAll(".okdev-language-menu").forEach((menu) => menu.remove());
-  }
-
   function createSettingsFlyout(navItem) {
-    closeLanguageMenu();
     // Remove existing panel if any
     const existingPanel = document.getElementById(PANEL_ID);
+    const draft = existingPanel?.dataset.dirty === 'true' ? {
+      revision: existingPanel._revision || 0,
+      values: [...existingPanel.querySelectorAll('input[id]')].map(input => ({id:input.id, value:input.value, checked:input.checked})),
+    } : null;
     if (existingPanel) {
+      existingPanel.dispose?.();
       existingPanel.remove();
     }
 
     // Create panel container (fixed positioning for viewport-relative coordinates)
     const panel = document.createElement("div");
     panel.id = PANEL_ID;
+    const cleanups = [];
+    const timers = new Set();
+    let disposed = false;
+    const schedule = (callback, delay) => {
+      const timer = setTimeout(() => {
+        timers.delete(timer);
+        if (!disposed && panel.isConnected) callback();
+      }, delay);
+      timers.add(timer);
+      return timer;
+    };
+    panel.dispose = () => {
+      if (disposed) return;
+      disposed = true;
+      timers.forEach(clearTimeout);
+      cleanups.forEach(cleanup => cleanup());
+      clearTimeout(pathValidationTimeout);
+      pathValidationTimeout = null;
+      hideGlobalTooltip();
+    };
+    panel.opener = navItem;
+    const markDirty = () => { panel.dataset.dirty = "true"; panel._revision = (panel._revision || 0) + 1; };
+    panel.addEventListener("input", markDirty);
+    panel.addEventListener("change", e => {
+      if (e.target.matches('input')) markDirty();
+    });
     panel.style.position = "fixed";
     panel.style.top = "0";
     panel.style.left = "0";
@@ -2050,6 +2020,7 @@
 
     function showGlobalTooltipFor(anchorEl, text) {
       const tooltip = getOrCreateGlobalTooltip();
+      tooltip._anchor = anchorEl;
       tooltip.textContent = text;
       tooltip.setAttribute("data-show", "true");
 
@@ -2105,11 +2076,15 @@
       // Keep tooltip in correct position while resizing/scrolling
       const reposition = () => {
         const tt = document.getElementById("okdev-global-tooltip");
-        if (!tt || tt.getAttribute("data-show") !== "true") return;
+        if (!tt || tt.getAttribute("data-show") !== "true" || tt._anchor !== btn) return;
         showGlobalTooltipFor(btn, tooltipText);
       };
       window.addEventListener("resize", reposition);
       window.addEventListener("scroll", reposition, true);
+      cleanups.push(() => {
+        window.removeEventListener("resize", reposition);
+        window.removeEventListener("scroll", reposition, true);
+      });
 
       wrapper.appendChild(btn);
       return wrapper;
@@ -2117,6 +2092,7 @@
 
     // Title + version badge inline
     const titleRow = document.createElement("div");
+    titleRow.className = "okdev-settings-header";
     titleRow.style.cssText = "display:flex;align-items:baseline;justify-content:center;gap:8px;margin-bottom:4px";
 
     const title = document.createElement("div");
@@ -2188,13 +2164,15 @@
 
     const thresholdSliderWrapper = document.createElement("div");
     thresholdSliderWrapper.className = "lol-settings-slider";
-    thresholdSliderWrapper.style.width = "400px";
+    thresholdSliderWrapper.style.width = "100%";
     thresholdSliderWrapper.style.height = "30px";
     thresholdSliderWrapper.style.position = "relative";
 
     const thresholdSlider = document.createElement("input");
     thresholdSlider.type = "range";
+    thresholdSlider.dir = "ltr";
     thresholdSlider.id = "threshold-slider";
+    thresholdSlider.setAttribute("aria-label", t("Injection Threshold (seconds):"));
     // Minimum Injection Threshold: 300ms (0.30s)
     thresholdSlider.min = "30";
     thresholdSlider.max = "200";
@@ -2227,19 +2205,12 @@
     thresholdTrack.style.height = "2px";
     thresholdTrack.style.background = "#1e2328";
 
-    // Calculate initial position for threshold slider (value 50, min 30, max 200)
-    const thresholdInitialValue = 50;
     const thresholdMin = 30;
     const thresholdMax = 200;
-    const thresholdPercentage = ((thresholdInitialValue - thresholdMin) / (thresholdMax - thresholdMin)) * 100;
-    const thresholdSliderWidth = 400;
-    const thresholdButtonWidth = 30;
-    const thresholdMaxPosition = thresholdSliderWidth - thresholdButtonWidth; // 370px max
-    const thresholdInitialPosition = (thresholdPercentage / 100) * thresholdMaxPosition;
 
     const thresholdFill = document.createElement("div");
     thresholdFill.className = "lol-uikit-slider-fill";
-    thresholdFill.style.width = `${thresholdInitialPosition}px`;
+    thresholdFill.style.width = "0px";
     thresholdFill.style.height = "2px";
     thresholdFill.style.background = "linear-gradient(to left, #695625, #463714)";
     thresholdFill.style.position = "absolute";
@@ -2249,11 +2220,9 @@
 
     const thresholdButton = document.createElement("div");
     thresholdButton.className = "lol-uikit-slider-button";
-    thresholdButton.style.left = `${thresholdInitialPosition}px`;
+    thresholdButton.style.left = "0px";
     thresholdButton.style.width = "30px";
     thresholdButton.style.height = "30px";
-    thresholdButton.style.background = "url('/fe/lol-uikit/images/slider-btn.png') no-repeat top left";
-    thresholdButton.style.backgroundSize = "100%";
     thresholdButton.style.position = "absolute";
     thresholdButton.style.top = "0px";
     thresholdButton.style.cursor = "pointer";
@@ -2274,7 +2243,7 @@
     benchmarkInfo.style.marginTop = "6px";
     benchmarkInfo.style.fontSize = "11px";
     benchmarkInfo.style.fontFamily = "'Beaufort for LOL', serif";
-    benchmarkInfo.style.color = "#7e6f4e";
+    benchmarkInfo.style.color = "#b8b1a3";
     thresholdSection.appendChild(benchmarkInfo);
 
     form.appendChild(thresholdSection);
@@ -2312,13 +2281,15 @@
 
     const timeoutSliderWrapper = document.createElement("div");
     timeoutSliderWrapper.className = "lol-settings-slider";
-    timeoutSliderWrapper.style.width = "400px";
+    timeoutSliderWrapper.style.width = "100%";
     timeoutSliderWrapper.style.height = "30px";
     timeoutSliderWrapper.style.position = "relative";
 
     const timeoutSlider = document.createElement("input");
     timeoutSlider.type = "range";
+    timeoutSlider.dir = "ltr";
     timeoutSlider.id = "timeout-slider";
+    timeoutSlider.setAttribute("aria-label", t("Monitor Auto-Resume Timeout (seconds):"));
     // Minimum Auto-Resume Timeout: 20s
     timeoutSlider.min = "20";
     timeoutSlider.max = "180";
@@ -2366,8 +2337,6 @@
     timeoutButton.style.left = "0px"; // Initial position
     timeoutButton.style.width = "30px";
     timeoutButton.style.height = "30px";
-    timeoutButton.style.background = "url('/fe/lol-uikit/images/slider-btn.png') no-repeat top left";
-    timeoutButton.style.backgroundSize = "100%";
     timeoutButton.style.position = "absolute";
     timeoutButton.style.top = "0px";
     timeoutButton.style.cursor = "pointer";
@@ -2393,7 +2362,7 @@
     autostartSection.style.flex = "1";
     autostartSection.style.minWidth = "0";
 
-    const autostartWrapper = document.createElement("div");
+    const autostartWrapper = document.createElement("label");
     autostartWrapper.className = "settings-checkbox-wrapper";
 
     const autostartCheckbox = document.createElement("input");
@@ -2412,7 +2381,7 @@
     customWheelSection.style.flex = "1";
     customWheelSection.style.minWidth = "0";
 
-    const hideEmptyCategoriesWrapper = document.createElement("div");
+    const hideEmptyCategoriesWrapper = document.createElement("label");
     hideEmptyCategoriesWrapper.className = "settings-checkbox-wrapper";
 
     const hideEmptyCategoriesCheckbox = document.createElement("input");
@@ -2435,6 +2404,7 @@
 
     const pathLabel = document.createElement("label");
     pathLabel.className = "settings-label";
+    pathLabel.htmlFor = "game-path-input";
     pathLabel.textContent = t("League of Legends Game Path:");
     pathSection.appendChild(pathLabel);
 
@@ -2444,6 +2414,7 @@
 
     const pathInput = document.createElement("input");
     pathInput.type = "text";
+    pathInput.dir = "ltr";
     pathInput.className = "settings-input";
     pathInput.id = "game-path-input";
     pathInput.placeholder = "C:\\Riot Games\\League of Legends\\Game";
@@ -2455,6 +2426,7 @@
     const pathStatus = document.createElement("span");
     pathStatus.className = "settings-status";
     pathStatus.id = "path-status";
+    pathStatus.setAttribute('role', 'status');
     pathStatus.textContent = "";
     pathInputWrapper.appendChild(pathStatus);
     pathSection.appendChild(pathInputWrapper);
@@ -2468,449 +2440,43 @@
     customModsRow.style.width = "100%";
 
     // Add custom mods dropdown
-    const modsDropdownContainer = document.createElement("div");
-    modsDropdownContainer.style.flex = "1";
-    modsDropdownContainer.style.minWidth = "0";
-
-    const modsDropdown = document.createElement("lol-uikit-framed-dropdown");
-    modsDropdown.id = "add-custom-mods-dropdown";
-    modsDropdown.className = "lol-publishing-locale-preference-dropdown";
-    modsDropdown.setAttribute("tabindex", "0");
-    modsDropdown.style.width = "100%";
-
-    // Add placeholder option for header display (hidden in dropdown menu)
-    const placeholderOption = document.createElement("lol-uikit-dropdown-option");
-    placeholderOption.setAttribute("slot", "lol-uikit-dropdown-option");
-    placeholderOption.setAttribute("value", "");
-    placeholderOption.className = "framed-dropdown-type placeholder-option";
-    placeholderOption.textContent = t("Add custom mods");
-    placeholderOption.style.color = "#7d7d7d";
-    placeholderOption.style.opacity = "0.7";
-    placeholderOption.style.pointerEvents = "none";
-    placeholderOption.style.cursor = "default";
-    placeholderOption.setAttribute("selected", ""); // Show in header
-    // Prevent any click events on the placeholder
-    placeholderOption.addEventListener("click", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      e.stopImmediatePropagation();
-      return false;
-    }, true); // Use capture phase to catch early
-    modsDropdown.appendChild(placeholderOption);
-
+    // Native selects keep keyboard behavior and avoid shadow-DOM polling.
     const categories = [
-      { id: "skins", name: "Skins" },
-      { id: "maps", name: "Maps" },
-      { id: "fonts", name: "Fonts" },
-      { id: "announcers", name: "Announcers" },
-      { id: "ui", name: "UI" },
-      { id: "voiceover", name: "Voiceover" },
-      { id: "loading_screen", name: "Loading Screen" },
-      { id: "vfx", name: "VFX" },
-      { id: "sfx", name: "SFX" },
-      { id: "others", name: "Others" },
+      { id: "skins", name: "Skins" }, { id: "maps", name: "Maps" },
+      { id: "fonts", name: "Fonts" }, { id: "announcers", name: "Announcers" },
+      { id: "ui", name: "UI" }, { id: "voiceover", name: "Voiceover" },
+      { id: "loading_screen", name: "Loading Screen" }, { id: "vfx", name: "VFX" },
+      { id: "sfx", name: "SFX" }, { id: "others", name: "Others" },
     ];
-
-    categories.forEach((category) => {
-      const option = document.createElement("lol-uikit-dropdown-option");
-      option.setAttribute("slot", "lol-uikit-dropdown-option");
-      option.setAttribute("value", category.id);
-      option.className = "framed-dropdown-type";
-      option.textContent = t(category.name);
-      modsDropdown.appendChild(option);
-    });
-
-    // Function to aggressively remove focus and glow effects
-    const removeFocusAndGlow = () => {
-      // Blur the dropdown element
-      if (document.activeElement === modsDropdown || modsDropdown.contains(document.activeElement)) {
-        modsDropdown.blur();
+    for (const [id, title, action] of [
+      ["add-custom-mods-dropdown", "Add custom mods", handleCategorySelection],
+      ["manage-custom-mods-dropdown", "Manage custom mods", handleManageCategorySelection],
+    ]) {
+      const select = document.createElement("select");
+      select.id = id;
+      select.className = "okdev-category-select";
+      select.setAttribute("aria-label", t(title));
+      const placeholder = document.createElement("option");
+      placeholder.value = "";
+      placeholder.textContent = t(title);
+      select.appendChild(placeholder);
+      for (const category of categories) {
+        const option = document.createElement("option");
+        option.value = category.id;
+        option.textContent = t(category.name);
+        select.appendChild(option);
       }
-
-      // Blur any focused elements within the dropdown
-      const focusedElement = modsDropdown.querySelector(':focus');
-      if (focusedElement) {
-        focusedElement.blur();
-      }
-
-      // Remove focus-related attributes and classes
-      modsDropdown.removeAttribute('tabindex');
-      modsDropdown.setAttribute('tabindex', '0');
-
-      // Blur elements in shadow DOM if accessible
-      const shadowRoot = modsDropdown.shadowRoot;
-      if (shadowRoot) {
-        const shadowFocused = shadowRoot.activeElement;
-        if (shadowFocused) {
-          shadowFocused.blur();
-        }
-        // Remove focus from all focusable elements in shadow DOM
-        shadowRoot.querySelectorAll('*').forEach(el => {
-          if (el === shadowRoot.activeElement || el.matches(':focus')) {
-            el.blur();
-          }
-        });
-      }
-
-      // Do not blur document.activeElement globally here. The delayed cleanup
-      // runs after opening dialogs too, so the active element may already be
-      // the champion search input. Blurring it makes the first click appear
-      // to be ignored and removes the caret from the input.
-    };
-
-    // Function to reset dropdown to placeholder and close it
-    const resetDropdown = () => {
-      // Remove active class to close dropdown
-      modsDropdown.classList.remove("active");
-      // Remove selected from all category options
-      modsDropdown.querySelectorAll('lol-uikit-dropdown-option[value!=""]').forEach(opt => {
-        opt.removeAttribute("selected");
+      select.addEventListener("change", () => {
+        const category = select.value;
+        select.value = "";
+        if (category) action(category);
       });
-      // Reset to placeholder option for header display
-      const placeholder = modsDropdown.querySelector('.placeholder-option');
-      if (placeholder) {
-        placeholder.setAttribute("selected", "");
-        // Force the dropdown to use placeholder value
-        if (modsDropdown.setAttribute) {
-          modsDropdown.setAttribute("value", "");
-        }
-      }
-
-      // Aggressively remove focus and glow effects
-      removeFocusAndGlow();
-
-      // Force reset again after a short delay to catch any framework updates
-      setTimeout(() => {
-        const placeholder = modsDropdown.querySelector('.placeholder-option');
-        if (placeholder && !placeholder.hasAttribute('selected')) {
-          placeholder.setAttribute("selected", "");
-        }
-        modsDropdown.querySelectorAll('lol-uikit-dropdown-option[value!=""]').forEach(opt => {
-          opt.removeAttribute("selected");
-        });
-        // Remove focus again after framework updates
-        removeFocusAndGlow();
-      }, 10);
-    };
-
-    // Handle dropdown selection change - prevent showing selected value
-    modsDropdown.addEventListener("change", (e) => {
-      const selectedValue = e.target.value || e.detail?.value;
-      if (selectedValue) {
-        handleCategorySelection(selectedValue);
-        // Immediately reset to placeholder before UI updates
-        resetDropdown();
-      }
-    });
-
-    // Handle click on options - prevent showing selected value
-    modsDropdown.querySelectorAll('lol-uikit-dropdown-option').forEach((option) => {
-      option.addEventListener("click", (e) => {
-        e.stopPropagation();
-        const categoryId = option.getAttribute("value");
-        // Ignore placeholder option (empty value)
-        if (categoryId) {
-          // Prevent the option from being selected
-          option.removeAttribute("selected");
-          handleCategorySelection(categoryId);
-          // Immediately reset to placeholder
-          resetDropdown();
-          // Remove focus immediately and after delays
-          setTimeout(() => removeFocusAndGlow(), 0);
-          setTimeout(() => removeFocusAndGlow(), 50);
-          setTimeout(() => removeFocusAndGlow(), 100);
-          setTimeout(() => removeFocusAndGlow(), 200);
-        }
-      }, true); // Use capture phase to intercept early
-    });
-
-    // Watch for any selected attribute changes and reset to placeholder
-    const observer = new MutationObserver((mutations) => {
-      mutations.forEach((mutation) => {
-        if (mutation.type === 'attributes' && mutation.attributeName === 'selected') {
-          const target = mutation.target;
-          // If a category option (not placeholder) gets selected, reset it
-          if (target.getAttribute('value') && target.getAttribute('value') !== '') {
-            const placeholder = modsDropdown.querySelector('.placeholder-option');
-            if (placeholder && !placeholder.hasAttribute('selected')) {
-              // Remove selected from category option
-              target.removeAttribute('selected');
-              // Set placeholder as selected
-              placeholder.setAttribute('selected', '');
-            }
-          }
-        }
-      });
-    });
-
-    // Observe all dropdown options for selected attribute changes
-    modsDropdown.querySelectorAll('lol-uikit-dropdown-option').forEach((option) => {
-      observer.observe(option, { attributes: true, attributeFilter: ['selected'] });
-    });
-
-    modsDropdownContainer.appendChild(modsDropdown);
-    customModsRow.appendChild(modsDropdownContainer);
+      customModsRow.appendChild(select);
+    }
     form.appendChild(customModsRow);
 
-
-    // Inject shadow DOM styles to override :host .ui-dropdown color
-    let retryCount = 0;
-    const MAX_RETRIES = 20;
-    const injectShadowStyles = () => {
-      const root = modsDropdown.shadowRoot;
-      if (!root) {
-        // Shadow root might not be ready yet, try again (up to MAX_RETRIES times)
-        if (retryCount < MAX_RETRIES) {
-          retryCount++;
-          setTimeout(injectShadowStyles, 50);
-        }
-        return;
-      }
-
-      // Check if style already injected
-      if (root.querySelector('style[data-okdev-dropdown-color]')) {
-        return;
-      }
-
-      const rootStyle = document.createElement("style");
-      rootStyle.setAttribute("data-okdev-dropdown-color", "true");
-      rootStyle.textContent = `
-        :host .ui-dropdown {
-          color: #CDBE91 !important;
-          font-size: 12px !important;
-          font-weight: normal !important;
-          line-height: 16px !important;
-          letter-spacing: 0.025em !important;
-          -webkit-font-smoothing: subpixel-antialiased !important;
-        }
-        
-        /* Remove all glow effects when not focused */
-        :host:not(:focus):not(:focus-within) .ui-dropdown,
-        :host:not(:focus):not(:focus-within) * {
-          filter: none !important;
-          -webkit-filter: none !important;
-          box-shadow: none !important;
-          text-shadow: none !important;
-          outline: none !important;
-        }
-      `;
-      root.appendChild(rootStyle);
-    };
-
-    // Try to inject styles immediately and retry if shadow root isn't ready
-    injectShadowStyles();
-
-    // Remove focus/shine effect after clicking - use the comprehensive function
-    modsDropdown.addEventListener("click", (e) => {
-      // Only remove focus if clicking outside of options (on the button itself)
-      if (!e.target.closest('lol-uikit-dropdown-option')) {
-        setTimeout(() => removeFocusAndGlow(), 100);
-      }
-    });
-
-    // Remove focus when mouse leaves the dropdown area
-    modsDropdown.addEventListener("mouseleave", () => {
-      // Only remove focus if dropdown is not active/open
-      if (!modsDropdown.classList.contains('active')) {
-        removeFocusAndGlow();
-      }
-    });
-
-    // Also blur when dropdown closes
-    modsDropdown.addEventListener("change", () => {
-      setTimeout(() => removeFocusAndGlow(), 50);
-      setTimeout(() => removeFocusAndGlow(), 150);
-    });
-
-    // Watch for when dropdown closes (active class removed) and remove focus
-    const activeObserver = new MutationObserver((mutations) => {
-      mutations.forEach((mutation) => {
-        if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
-          // If active class was removed, ensure focus is removed
-          if (!modsDropdown.classList.contains('active')) {
-            removeFocusAndGlow();
-            // Also remove focus after a delay to catch any late updates
-            setTimeout(() => removeFocusAndGlow(), 50);
-            setTimeout(() => removeFocusAndGlow(), 150);
-          }
-        }
-      });
-    });
-    activeObserver.observe(modsDropdown, { attributes: true, attributeFilter: ['class'] });
-
-    // Manage custom mods dropdown
-    const manageDropdownContainer = document.createElement("div");
-    manageDropdownContainer.style.flex = "1";
-    manageDropdownContainer.style.minWidth = "0";
-
-    const manageDropdown = document.createElement("lol-uikit-framed-dropdown");
-    manageDropdown.id = "manage-custom-mods-dropdown";
-    manageDropdown.className = "lol-publishing-locale-preference-dropdown";
-    manageDropdown.setAttribute("tabindex", "0");
-    manageDropdown.style.width = "100%";
-
-    const managePlaceholderOption = document.createElement("lol-uikit-dropdown-option");
-    managePlaceholderOption.setAttribute("slot", "lol-uikit-dropdown-option");
-    managePlaceholderOption.setAttribute("value", "");
-    managePlaceholderOption.setAttribute("selected", "");
-    managePlaceholderOption.className = "placeholder-option framed-dropdown-type";
-    managePlaceholderOption.textContent = t("Manage custom mods");
-    managePlaceholderOption.addEventListener("click", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      e.stopImmediatePropagation();
-      return false;
-    }, true);
-    manageDropdown.appendChild(managePlaceholderOption);
-
-    const manageCategories = [
-      { id: "skins", name: "Skins" },
-      { id: "maps", name: "Maps" },
-      { id: "fonts", name: "Fonts" },
-      { id: "announcers", name: "Announcers" },
-      { id: "ui", name: "UI" },
-      { id: "voiceover", name: "Voiceover" },
-      { id: "loading_screen", name: "Loading Screen" },
-      { id: "vfx", name: "VFX" },
-      { id: "sfx", name: "SFX" },
-      { id: "others", name: "Others" },
-    ];
-    manageCategories.forEach((category) => {
-      const option = document.createElement("lol-uikit-dropdown-option");
-      option.setAttribute("slot", "lol-uikit-dropdown-option");
-      option.setAttribute("value", category.id);
-      option.className = "framed-dropdown-type";
-      option.textContent = t(category.name);
-      manageDropdown.appendChild(option);
-    });
-
-    const removeManageFocusAndGlow = () => {
-      if (document.activeElement === manageDropdown || manageDropdown.contains(document.activeElement)) {
-        manageDropdown.blur();
-      }
-      const focusedEl = manageDropdown.querySelector(':focus');
-      if (focusedEl) focusedEl.blur();
-      manageDropdown.removeAttribute('tabindex');
-      manageDropdown.setAttribute('tabindex', '0');
-      const manageShadowRoot = manageDropdown.shadowRoot;
-      if (manageShadowRoot && manageShadowRoot.activeElement) manageShadowRoot.activeElement.blur();
-    };
-
-    const resetManageDropdown = () => {
-      manageDropdown.classList.remove("active");
-      manageDropdown.querySelectorAll('lol-uikit-dropdown-option[value!=""]').forEach(opt => opt.removeAttribute("selected"));
-      const managePh = manageDropdown.querySelector('.placeholder-option');
-      if (managePh) {
-        managePh.setAttribute("selected", "");
-        manageDropdown.setAttribute("value", "");
-      }
-      removeManageFocusAndGlow();
-      setTimeout(() => {
-        const ph = manageDropdown.querySelector('.placeholder-option');
-        if (ph && !ph.hasAttribute('selected')) ph.setAttribute("selected", "");
-        manageDropdown.querySelectorAll('lol-uikit-dropdown-option[value!=""]').forEach(opt => opt.removeAttribute("selected"));
-        removeManageFocusAndGlow();
-      }, 10);
-    };
-
-    manageDropdown.addEventListener("change", (e) => {
-      const selectedValue = e.target.value || e.detail?.value;
-      if (selectedValue) {
-        handleManageCategorySelection(selectedValue);
-        resetManageDropdown();
-      }
-    });
-
-    manageDropdown.querySelectorAll('lol-uikit-dropdown-option').forEach((option) => {
-      option.addEventListener("click", (e) => {
-        e.stopPropagation();
-        const categoryId = option.getAttribute("value");
-        if (categoryId) {
-          option.removeAttribute("selected");
-          handleManageCategorySelection(categoryId);
-          resetManageDropdown();
-          [0, 50, 100, 200].forEach(d => setTimeout(removeManageFocusAndGlow, d));
-        }
-      }, true);
-    });
-
-    const manageSelectedObserver = new MutationObserver((mutations) => {
-      mutations.forEach((mutation) => {
-        if (mutation.type === 'attributes' && mutation.attributeName === 'selected') {
-          const target = mutation.target;
-          if (target.getAttribute('value')) {
-            const ph = manageDropdown.querySelector('.placeholder-option');
-            if (ph && !ph.hasAttribute('selected')) {
-              target.removeAttribute('selected');
-              ph.setAttribute('selected', '');
-            }
-          }
-        }
-      });
-    });
-    manageDropdown.querySelectorAll('lol-uikit-dropdown-option').forEach(opt =>
-      manageSelectedObserver.observe(opt, { attributes: true, attributeFilter: ['selected'] })
-    );
-
-    manageDropdownContainer.appendChild(manageDropdown);
-    customModsRow.appendChild(manageDropdownContainer);
-
-    let manageRetryCount = 0;
-    const injectManageShadowStyles = () => {
-      const root = manageDropdown.shadowRoot;
-      if (!root) {
-        if (manageRetryCount < MAX_RETRIES) { manageRetryCount++; setTimeout(injectManageShadowStyles, 50); }
-        return;
-      }
-      if (root.querySelector('style[data-okdev-dropdown-color]')) return;
-      const s = document.createElement("style");
-      s.setAttribute("data-okdev-dropdown-color", "true");
-      s.textContent = `
-        :host .ui-dropdown {
-          color: #CDBE91 !important;
-          font-size: 12px !important;
-          font-weight: normal !important;
-          line-height: 16px !important;
-          letter-spacing: 0.025em !important;
-          -webkit-font-smoothing: subpixel-antialiased !important;
-        }
-        :host:not(:focus):not(:focus-within) .ui-dropdown,
-        :host:not(:focus):not(:focus-within) * {
-          filter: none !important;
-          -webkit-filter: none !important;
-          box-shadow: none !important;
-          text-shadow: none !important;
-          outline: none !important;
-        }
-      `;
-      root.appendChild(s);
-    };
-    injectManageShadowStyles();
-
-    manageDropdown.addEventListener("click", (e) => {
-      if (!e.target.closest('lol-uikit-dropdown-option')) setTimeout(removeManageFocusAndGlow, 100);
-    });
-    manageDropdown.addEventListener("mouseleave", () => {
-      if (!manageDropdown.classList.contains('active')) removeManageFocusAndGlow();
-    });
-    manageDropdown.addEventListener("change", () => {
-      [50, 150].forEach(d => setTimeout(removeManageFocusAndGlow, d));
-    });
-
-    const manageActiveObserver = new MutationObserver((mutations) => {
-      mutations.forEach((mutation) => {
-        if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
-          if (!manageDropdown.classList.contains('active')) {
-            removeManageFocusAndGlow();
-            [50, 150].forEach(d => setTimeout(removeManageFocusAndGlow, d));
-          }
-        }
-      });
-    });
-    manageActiveObserver.observe(manageDropdown, { attributes: true, attributeFilter: ['class'] });
-
     // Open logs folder button
-    const logsButton = document.createElement("lol-uikit-flat-button-secondary");
+    const logsButton = createActionButton();
     logsButton.id = "logs-folder-button";
     logsButton.textContent = t("Open Logs Folder");
     logsButton.style.marginTop = "8px";
@@ -2918,10 +2484,12 @@
     logsButton.addEventListener("click", () => {
       openLogsFolder();
     });
-    form.appendChild(logsButton);
+    const toolsRow = document.createElement('div');
+    toolsRow.className = 'okdev-tools-row';
+    toolsRow.appendChild(logsButton);
 
     // Troubleshooting button (opens a small dialog with compact errors)
-    const troubleshootButton = document.createElement("lol-uikit-flat-button-secondary");
+    const troubleshootButton = createActionButton();
     troubleshootButton.id = "troubleshoot-button";
     troubleshootButton.textContent = t("Troubleshooting");
     troubleshootButton.style.marginTop = "8px";
@@ -2929,11 +2497,11 @@
     troubleshootButton.addEventListener("click", () => {
       openDiagnosticsDialog();
     });
-    form.appendChild(troubleshootButton);
+    toolsRow.appendChild(troubleshootButton);
 
 
     // Open Pengu Loader UI button
-    const penguUIButton = document.createElement("lol-uikit-flat-button-secondary");
+    const penguUIButton = createActionButton();
     penguUIButton.id = "pengu-ui-button";
     penguUIButton.textContent = t("Open Pengu Loader UI");
     penguUIButton.style.marginTop = "8px";
@@ -2941,12 +2509,14 @@
     penguUIButton.addEventListener("click", () => {
       openPenguLoaderUI();
     });
-    form.appendChild(penguUIButton);
+    toolsRow.appendChild(penguUIButton);
+    form.appendChild(toolsRow);
 
     // Save button (moved to last position)
-    const saveButton = document.createElement("lol-uikit-flat-button-secondary");
+    const saveButton = createActionButton();
     saveButton.id = "save-button";
-    saveButton.textContent = t("Save");
+    saveButton.textContent = t(_pendingSave ? "Saving..." : "Save");
+    saveButton.disabled = !!_pendingSave;
     saveButton.style.marginTop = "8px";
     // At least its usual size, wider when the text is longer (other languages)
     saveButton.style.minWidth = "21%";
@@ -2955,29 +2525,30 @@
       saveSettings();
     });
     form.appendChild(saveButton);
+    const feedback = document.createElement("p");
+    feedback.id = "okdev-settings-feedback";
+    feedback.className = "okdev-save-status";
+    feedback.setAttribute("role", "status");
+    feedback.setAttribute("aria-live", "polite");
+    form.appendChild(feedback);
 
     // Links section
     const linksSection = document.createElement("div");
     linksSection.className = "settings-links";
 
-    const discordLink = document.createElement("a");
-    discordLink.className = "settings-link";
-    discordLink.href = DISCORD_INVITE_URL;
-    discordLink.target = "_blank";
-    discordLink.textContent = "OKDEV Destek";
-    linksSection.appendChild(discordLink);
-
-    const kofiLink = document.createElement("a");
-    kofiLink.className = "settings-link";
-    kofiLink.href = KOFI_URL;
-    kofiLink.target = "_blank";
-    kofiLink.textContent = "OKDEV";
-    linksSection.appendChild(kofiLink);
+    const supportLink = document.createElement("a");
+    supportLink.className = "settings-link";
+    supportLink.href = SUPPORT_URL;
+    supportLink.target = "_blank";
+    supportLink.rel = "noopener noreferrer";
+    supportLink.textContent = t("Support");
+    linksSection.appendChild(supportLink);
 
     const githubLink = document.createElement("a");
     githubLink.className = "settings-link";
     githubLink.href = GITHUB_URL;
     githubLink.target = "_blank";
+    githubLink.rel = "noopener noreferrer";
     githubLink.textContent = "GitHub";
     linksSection.appendChild(githubLink);
 
@@ -2988,7 +2559,7 @@
     panel.appendChild(flyoutFrame);
 
     // Setup slider interactions after form is added to DOM
-    setTimeout(() => {
+    schedule(() => {
       setupSliderInteractions("threshold", thresholdSlider, thresholdButton, thresholdFill, thresholdValue, thresholdMin, thresholdMax, (value) => {
         return parseFloat(value) / 100;
       }, (value) => {
@@ -3012,177 +2583,68 @@
     }, 100);
 
     settingsPanel = panel;
+    if (draft) {
+      panel.dataset.dirty = 'true';
+      panel._revision = draft.revision;
+      for (const saved of draft.values) {
+        const input = panel.querySelector('#' + saved.id);
+        if (input) { input.value = saved.value; input.checked = saved.checked; }
+      }
+      if (_pendingSave?.panel === existingPanel) _pendingSave.panel = panel;
+    }
 
-    // Recalculate position after adding to DOM to ensure accurate positioning
-    _flyoutRepositionTimer = setTimeout(() => {
-      // If panel was closed before this runs, do nothing.
-      if (!settingsPanel || !document.getElementById(PANEL_ID)) return;
-      const liveFlyout = document.getElementById(FLYOUT_ID);
-      if (!liveFlyout) return;
-      const updatedIconElement =
-        navItem.querySelector(".menu-item-icon") ||
-        navItem.querySelector(".menu-item-icon-wrapper") ||
-        navItem;
-      const updatedIconRect = updatedIconElement.getBoundingClientRect();
-      liveFlyout.style.top = `${updatedIconRect.bottom + 45}px`;
-      liveFlyout.style.left = `${updatedIconRect.left + updatedIconRect.width / 2
-        }px`;
-      liveFlyout.style.transform = "translateX(-50%)"; // Center the panel on the icon
-    }, 0);
+    const reposition = () => {
+      if (disposed || !panel.isConnected) return;
+      const icon = navItem.querySelector(".menu-item-icon") || navItem;
+      const rect = icon.getBoundingClientRect();
+      const width = Math.min(420, window.innerWidth - 24);
+      const top = Math.max(12, Math.min(rect.bottom + 18, window.innerHeight - 250));
+      const left = Math.max(12, Math.min(rect.left + rect.width / 2 - width / 2, window.innerWidth - width - 12));
+      flyoutFrame.style.width = `${width}px`;
+      flyoutFrame.style.top = `${top}px`;
+      flyoutFrame.style.left = `${left}px`;
+      flyoutFrame.style.transform = "none";
+      flyoutContent.style.maxHeight = `${Math.max(120, window.innerHeight - top - 12)}px`;
+    };
+    window.addEventListener("resize", reposition);
+    cleanups.push(() => window.removeEventListener("resize", reposition));
+    reposition();
+    schedule(reposition, 0);
+    prepareOwnedDialog(flyoutFrame, "Settings", closeSettingsPanel);
+    flyoutFrame.setAttribute("role", "dialog");
+    flyoutFrame.setAttribute("aria-modal", "true");
+    flyoutFrame.setAttribute("aria-label", t("Settings"));
+    flyoutFrame.tabIndex = -1;
+    const closeButton = createActionButton();
+    closeButton.className += " okdev-panel-close";
+    closeButton.textContent = "×";
+    closeButton.setAttribute("aria-label", t("Close"));
+    closeButton.addEventListener("click", closeSettingsPanel);
+    titleRow.appendChild(closeButton);
+    schedule(() => closeButton.focus(), 0);
 
     // Request current settings and benchmark data
     requestSettings();
     requestDiagnostics();
   }
 
+  function updateRangeVisual(slider, button, fill, valueDisplay, valueConverter, displayFormatter) {
+    const min = Number(slider.min), max = Number(slider.max);
+    const value = Math.max(min, Math.min(max, Number(slider.value)));
+    const fraction = max > min ? (value - min) / (max - min) : 0;
+    const position = `calc(${fraction * 100}% - ${fraction * 30}px)`;
+    button.style.left = position;
+    fill.style.width = position;
+    const text = displayFormatter(valueConverter(value));
+    valueDisplay.textContent = text;
+    slider.setAttribute('aria-valuetext', text);
+  }
+
   function setupSliderInteractions(sliderId, slider, button, fill, valueDisplay, min, max, valueConverter, displayFormatter) {
     if (!slider || !button || !fill || !valueDisplay) return;
-
-    let isHovered = false;
-    let isDragging = false;
-
-    const updateSlider = (rawValue) => {
-      const value = Math.max(min, Math.min(max, rawValue));
-      const percentage = ((value - min) / (max - min)) * 100;
-      const sliderWidth = 400;
-      const buttonWidth = 30;
-      const maxPosition = sliderWidth - buttonWidth; // 370px max to keep button within bounds
-      const buttonPosition = (percentage / 100) * maxPosition;
-
-      if (isDragging) {
-        button.style.transition = 'none';
-        fill.style.transition = 'none';
-      } else {
-        button.style.transition = 'left 0.1s ease-out';
-        fill.style.transition = 'width 0.1s ease-out, background 0.2s ease';
-      }
-
-      button.style.left = `${buttonPosition}px`;
-      fill.style.width = `${buttonPosition}px`;
-
-      const convertedValue = valueConverter(value);
-      valueDisplay.textContent = displayFormatter(convertedValue);
-      slider.value = value;
-
-      // Maintain hover effects after slider update
-      if (!isDragging) {
-        updateHoverEffects();
-      }
-    };
-
-    const updateHoverEffects = () => {
-      if (isHovered || isDragging) {
-        fill.style.background = isDragging
-          ? 'linear-gradient(to right, #695625, #463714)'
-          : 'linear-gradient(to right, #785a28 0%, #c89b3c 56%, #c8aa6e 100%)';
-        button.style.backgroundPosition = isDragging ? '0 -60px' : '0 -30px';
-      } else {
-        fill.style.background = 'linear-gradient(to left, #695625, #463714)';
-        button.style.backgroundPosition = '0 0';
-      }
-    };
-
-    slider.addEventListener('input', (e) => {
-      updateSlider(parseInt(e.target.value));
-    });
-
-    // Use the slider container for hover detection to be more precise
-    const sliderContainer = slider.closest('.lol-settings-slider');
-    if (sliderContainer) {
-      sliderContainer.addEventListener('mouseenter', () => {
-        isHovered = true;
-        updateHoverEffects();
-      });
-
-      sliderContainer.addEventListener('mouseleave', () => {
-        isHovered = false;
-        updateHoverEffects();
-      });
-
-      // Also handle mouseover on child elements to ensure hover state is maintained
-      const handleMouseOver = () => {
-        if (!isHovered) {
-          isHovered = true;
-          updateHoverEffects();
-        }
-      };
-
-      const handleMouseOut = (e) => {
-        // Check if we're actually leaving the container
-        const relatedTarget = e.relatedTarget;
-        if (!relatedTarget || !sliderContainer.contains(relatedTarget)) {
-          isHovered = false;
-          updateHoverEffects();
-        }
-      };
-
-      // Add listeners to all interactive child elements
-      const buttonElement = sliderContainer.querySelector('.lol-uikit-slider-button');
-      const trackElement = sliderContainer.querySelector('.lol-uikit-slider-base-track');
-
-      if (buttonElement) {
-        buttonElement.addEventListener('mouseover', handleMouseOver);
-        buttonElement.addEventListener('mouseout', handleMouseOut);
-      }
-
-      if (trackElement) {
-        trackElement.addEventListener('mouseover', handleMouseOver);
-        trackElement.addEventListener('mouseout', handleMouseOut);
-      }
-    }
-
-    const handleMouseMove = (e) => {
-      if (!isDragging) return;
-
-      const sliderRect = slider.getBoundingClientRect();
-      const x = Math.max(0, Math.min(sliderRect.width, e.clientX - sliderRect.left));
-      const percentage = x / sliderRect.width;
-      const value = Math.round(percentage * (max - min) + min);
-
-      updateSlider(value);
-    };
-
-    const cleanupDragging = () => {
-      if (!isDragging) return;
-
-      isDragging = false;
-      updateHoverEffects();
-
-      button.style.transition = 'left 0.1s ease-out';
-      fill.style.transition = 'width 0.1s ease-out, background 0.2s ease';
-
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', cleanupDragging);
-      document.removeEventListener('mouseleave', cleanupDragging);
-    };
-
-    button.addEventListener('mousedown', (e) => {
-      isDragging = true;
-      updateHoverEffects();
-      e.preventDefault();
-
-      button.style.transition = 'none';
-      fill.style.transition = 'none';
-
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', cleanupDragging);
-      document.addEventListener('mouseleave', cleanupDragging);
-    });
-
-    const track = slider.closest('.lol-settings-slider')?.querySelector('.lol-uikit-slider-base-track');
-    if (track) {
-      track.addEventListener('click', (e) => {
-        const sliderRect = slider.getBoundingClientRect();
-        const x = Math.max(0, Math.min(sliderRect.width, e.clientX - sliderRect.left));
-        const percentage = x / sliderRect.width;
-        const value = Math.round(percentage * (max - min) + min);
-
-        updateSlider(value);
-      });
-    }
-
-    // Initialize position
-    updateSlider(parseInt(slider.value));
+    const update = () => updateRangeVisual(slider, button, fill, valueDisplay, valueConverter, displayFormatter);
+    slider.addEventListener('input', update);
+    update();
   }
 
   function updateSettingsForm() {
@@ -3202,25 +2664,15 @@
       const sliderValue = Math.round(currentSettings.threshold * 100);
       thresholdSlider.value = sliderValue;
       thresholdValue.textContent = `${currentSettings.threshold.toFixed(2)} s`;
-      const min = parseInt(thresholdSlider.min || "30", 10);
-      const max = parseInt(thresholdSlider.max || "200", 10);
-      const percentage = ((sliderValue - min) / (max - min)) * 100;
-      const maxPosition = 400 - 30; // 370px max
-      const buttonPosition = (percentage / 100) * maxPosition;
-      thresholdButton.style.left = `${buttonPosition}px`;
-      thresholdFill.style.width = `${buttonPosition}px`;
+      updateRangeVisual(thresholdSlider, thresholdButton, thresholdFill, thresholdValue,
+        value => value / 100, value => `${value.toFixed(2)} s`);
     }
 
     if (timeoutSlider && timeoutValue && timeoutButton && timeoutFill) {
       timeoutSlider.value = currentSettings.monitorAutoResumeTimeout;
       timeoutValue.textContent = `${currentSettings.monitorAutoResumeTimeout} s`;
-      const min = parseInt(timeoutSlider.min || "20", 10);
-      const max = parseInt(timeoutSlider.max || "180", 10);
-      const percentage = ((currentSettings.monitorAutoResumeTimeout - min) / (max - min)) * 100;
-      const maxPosition = 400 - 30; // 370px max
-      const buttonPosition = (percentage / 100) * maxPosition;
-      timeoutButton.style.left = `${buttonPosition}px`;
-      timeoutFill.style.width = `${buttonPosition}px`;
+      updateRangeVisual(timeoutSlider, timeoutButton, timeoutFill, timeoutValue,
+        value => value, value => `${value} s`);
     }
 
     if (autostartCheckbox) {
@@ -3238,9 +2690,9 @@
       if (pathStatus) {
         const path = pathInput.value.trim();
         if (path.length === 0) {
-          pathStatus.textContent = "";
+          showPathStatus('');
         } else if (currentSettings.gamePathValid) {
-          pathStatus.textContent = "✅";
+          showPathStatus('valid');
         } else {
           // Request validation for the loaded path
           requestPathValidation(path);
@@ -3264,13 +2716,15 @@
     }
 
     const path = pathInput.value.trim();
+    clearTimeout(pathValidationTimeout);
+    pathValidationTimeout = null;
     if (path.length === 0) {
-      pathStatus.textContent = "";
+      showPathStatus('');
       return;
     }
 
     // Show loading indicator while validating
-    pathStatus.textContent = "⏳";
+    showPathStatus('pending');
 
     // Clear any existing timeout
     if (pathValidationTimeout) {
@@ -3301,6 +2755,11 @@
   }
 
   function saveSettings() {
+    if (_pendingSave) return;
+    if (!bridge || !bridge.ready) {
+      showSettingsFeedback(t("Connection lost. Reopen OKDEV and try again."), true);
+      return;
+    }
     const thresholdSlider = document.getElementById("threshold-slider");
     const timeoutSlider = document.getElementById("timeout-slider");
     const autostartCheckbox = document.getElementById("autostart-checkbox");
@@ -3323,16 +2782,32 @@
     const clampedTimeout = Math.max(20, Math.min(180, monitorAutoResumeTimeout));
 
     // Track what we're trying to save; we only clear warnings after the save succeeds.
-    _pendingSave = { threshold: clampedThreshold, monitorAutoResumeTimeout: clampedTimeout };
+    const requestId = `settings-${Date.now()}-${++_saveSequence}`;
+    _pendingSave = { threshold: clampedThreshold, monitorAutoResumeTimeout: clampedTimeout,
+      requestId, panel: settingsPanel, revision: settingsPanel?._revision || 0 };
+    const saveButton = document.getElementById("save-button");
+    if (saveButton) { saveButton.disabled = true; saveButton.textContent = t("Saving..."); }
+    showSettingsFeedback("");
+    clearTimeout(_saveTimeout);
+    _saveTimeout = setTimeout(() => {
+      _pendingSave = null;
+      const button = document.getElementById("save-button");
+      if (button) { button.disabled = false; button.textContent = t("Save"); }
+      showSettingsFeedback(t("No response received. Check the connection before saving again."), true);
+    }, 15000);
 
-    if (bridge) bridge.send({
+    try { bridge.send({
       type: "settings-save",
+      requestId,
       threshold: clampedThreshold,
       monitorAutoResumeTimeout: clampedTimeout,
       autostart: autostart,
       hideEmptyCategories: hideEmptyCategories,
       gamePath: gamePath,
-    });
+    }); } catch (error) {
+      handleSettingsSaved({requestId, success:false, error:String(error)});
+      return;
+    }
 
     log("info", "Settings save requested", {
       threshold: clampedThreshold,
@@ -3352,12 +2827,13 @@
     // Remove existing dialog if any
     const existingDialog = document.getElementById("add-custom-mods-dialog");
     if (existingDialog) {
-      existingDialog.remove();
+      removeOwnedDialog(existingDialog);
     }
 
     // Create dialog container
     const dialog = document.createElement("div");
     dialog.id = "add-custom-mods-dialog";
+    prepareOwnedDialog(dialog, "Add Custom Mods", closeCategoryDialog);
     dialog.style.position = "fixed";
     dialog.style.top = "0";
     dialog.style.left = "0";
@@ -3436,7 +2912,7 @@
     ];
 
     categories.forEach((category) => {
-      const categoryButton = document.createElement("lol-uikit-flat-button-secondary");
+      const categoryButton = createActionButton();
       categoryButton.textContent = t(category.name);
       categoryButton.style.width = "100%";
       categoryButton.style.padding = "12px";
@@ -3459,7 +2935,7 @@
   function closeCategoryDialog() {
     const dialog = document.getElementById("add-custom-mods-dialog");
     if (dialog) {
-      dialog.remove();
+      removeOwnedDialog(dialog);
     }
   }
 
@@ -3485,12 +2961,13 @@
     // Remove existing dialog if any
     const existingDialog = document.getElementById("champion-selection-dialog");
     if (existingDialog) {
-      existingDialog.remove();
+      removeOwnedDialog(existingDialog);
     }
 
     // Dialog is the backdrop itself — no extra wrapper
     const dialog = document.createElement("div");
     dialog.id = "champion-selection-dialog";
+    prepareOwnedDialog(dialog, "Select Champion", closeChampionSelection);
     dialog.addEventListener("click", (e) => {
       if (e.target === dialog) {
         closeChampionSelection();
@@ -3555,6 +3032,7 @@
     searchInput.name = "champion_search";
     searchInput.id = "champion-search-input";
     searchInput.placeholder = t("Search champions...");
+    searchInput.setAttribute("aria-label", t("Search champions..."));
     searchInput.autocomplete = "off";
     searchInput.autocorrect = "off";
     searchInput.autocapitalize = "off";
@@ -3615,7 +3093,7 @@
   function closeChampionSelection() {
     const dialog = document.getElementById("champion-selection-dialog");
     if (dialog) {
-      dialog.remove();
+      removeOwnedDialog(dialog);
     }
     delete window.__okdevChampionRenderer;
     delete window.__okdevAllChampions;
@@ -3633,7 +3111,8 @@
     }
 
     champions.forEach((champion) => {
-      const card = document.createElement("div");
+      const card = document.createElement("button");
+      card.type = "button";
       card.className = "champion-card";
 
       const img = document.createElement("img");
@@ -3669,12 +3148,13 @@
     // Remove existing dialog if any
     const existingDialog = document.getElementById("skin-selection-dialog");
     if (existingDialog) {
-      existingDialog.remove();
+      removeOwnedDialog(existingDialog);
     }
 
     // Dialog is the backdrop itself
     const dialog = document.createElement("div");
     dialog.id = "skin-selection-dialog";
+    prepareOwnedDialog(dialog, "Select Skins & Chromas", closeSkinSelection);
     dialog.addEventListener("click", (e) => {
       if (e.target === dialog) {
         closeSkinSelection();
@@ -3779,6 +3259,8 @@
 
     window.__okdevSelectedSkinIds = new Set();
 
+    // Establish ownership before sending; a host may respond immediately.
+    window.__okdevSelectedChampionId = championId;
     // Request skins for champion
     if (bridge) bridge.send({
       type: "add-custom-mods-skin-selected",
@@ -3786,14 +3268,12 @@
       championId: championId,
     });
 
-    // Store champion ID for later use
-    window.__okdevSelectedChampionId = championId;
   }
 
   function closeSkinSelection() {
     const dialog = document.getElementById("skin-selection-dialog");
     if (dialog) {
-      dialog.remove();
+      removeOwnedDialog(dialog);
     }
     delete window.__okdevSelectedChampionId;
   }
@@ -3885,16 +3365,17 @@
   function createModsListDialog(id, titleText, onBack, onDismiss) {
     const existingDialog = document.getElementById(id);
     if (existingDialog) {
-      existingDialog.remove();
+      removeOwnedDialog(existingDialog);
     }
 
     const dismiss = () => {
-      dialog.remove();
+      removeOwnedDialog(dialog);
       if (onDismiss) onDismiss();
     };
 
     const dialog = document.createElement("div");
     dialog.id = id;
+    prepareOwnedDialog(dialog, titleText, dismiss);
     dialog.style.cssText = "position:fixed;top:0;left:0;width:100%;height:100%;z-index:10001;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;";
     dialog.addEventListener("click", (e) => {
       if (e.target === dialog) {
@@ -3937,6 +3418,12 @@
     titleWrapper.textContent = titleText;
     header.appendChild(titleWrapper);
     flyoutContent.appendChild(header);
+
+    const feedback = document.createElement('div');
+    feedback.className = 'okdev-management-feedback';
+    feedback.setAttribute('role', 'alert');
+    feedback.hidden = true;
+    flyoutContent.appendChild(feedback);
 
     const listContainer = document.createElement("div");
     listContainer.id = `${id}-list`;
@@ -4028,10 +3515,11 @@
 
   function promptRenameMod(currentName, onConfirm) {
     const existing = document.getElementById("rename-mod-dialog");
-    if (existing) existing.remove();
+    if (existing) removeOwnedDialog(existing);
 
     const dlg = document.createElement("div");
     dlg.id = "rename-mod-dialog";
+    prepareOwnedDialog(dlg, "Rename mod");
     dlg.style.cssText = "position:fixed;top:0;left:0;width:100%;height:100%;z-index:10004;";
 
     const backdrop = document.createElement("div");
@@ -4052,6 +3540,7 @@
     const input = document.createElement("input");
     input.type = "text";
     input.value = currentName || "";
+    input.setAttribute("aria-label", t("Rename mod"));
     input.maxLength = 100;
     input.style.cssText = "width:100%;padding:8px;background:#1e2328;border:1px solid #5c5b56;color:#cdbe91;font-size:14px;font-family:'Beaufort for LOL',serif;box-sizing:border-box;outline:none;";
     box.appendChild(input);
@@ -4066,7 +3555,7 @@
     const submit = () => {
       const value = input.value.trim();
       if (!value) return;
-      dlg.remove();
+      removeOwnedDialog(dlg);
       onConfirm(value);
     };
     saveButton.addEventListener("click", submit);
@@ -4087,16 +3576,17 @@
     input.select();
     input.addEventListener("keydown", (e) => {
       if (e.key === "Enter") { e.preventDefault(); submit(); }
-      else if (e.key === "Escape") { e.preventDefault(); dlg.remove(); }
+      else if (e.key === "Escape") { e.preventDefault(); removeOwnedDialog(dlg); }
     });
   }
 
   function confirmDeleteMod(modName, onConfirm) {
     const existing = document.getElementById("delete-mod-confirm-dialog");
-    if (existing) existing.remove();
+    if (existing) removeOwnedDialog(existing);
 
     const confirmDialog = document.createElement("div");
     confirmDialog.id = "delete-mod-confirm-dialog";
+    prepareOwnedDialog(confirmDialog, "Delete");
     confirmDialog.style.cssText = "position:fixed;top:0;left:0;width:100%;height:100%;z-index:10004;";
 
     const backdrop = document.createElement("div");
@@ -4111,6 +3601,7 @@
     box.addEventListener("click", (e) => e.stopPropagation());
 
     const message = document.createElement("div");
+    message.style.backgroundColor = "#010a13";
     message.style.color = "#cdbe91";
     message.style.fontFamily = '"Beaufort for LOL", serif';
     message.style.marginBottom = "16px";
@@ -4134,7 +3625,7 @@
     deleteButton.className = "mod-delete-button";
     deleteButton.textContent = t("Delete");
     deleteButton.addEventListener("click", () => {
-      confirmDialog.remove();
+      removeOwnedDialog(confirmDialog);
       onConfirm();
     });
     actions.appendChild(deleteButton);
@@ -4153,7 +3644,7 @@
     );
     window.__okdevManageChampionId = championId;
 
-    if (bridge) bridge.send({
+    sendManagedRequest(document.getElementById("champion-mods-manage-dialog"), {
       type: "request-manage-champion-mods",
       championId: championId,
     });
@@ -4161,7 +3652,7 @@
 
   function closeChampionModsList() {
     const dialog = document.getElementById("champion-mods-manage-dialog");
-    if (dialog) dialog.remove();
+    if (dialog) removeOwnedDialog(dialog);
     delete window.__okdevManageChampionId;
   }
 
@@ -4179,7 +3670,10 @@
         : t("Manage Mods");
     }
 
+    const owner = document.getElementById("champion-mods-manage-dialog");
+    finishManagedRequest(owner);
     listContainer.innerHTML = "";
+    if (payload.error) { showManagedFailure(owner, payload.error); return; }
     const mods = payload.mods || [];
     if (mods.length === 0) {
       listContainer.innerHTML = `<div style="color: #cdbe91; text-align: center; padding: 20px; font-family: 'Beaufort for LOL', serif;">${escapeHtml(t("No custom mods installed for this champion."))}</div>`;
@@ -4196,9 +3690,7 @@
         listContainer,
         { name: mod.modName, displayName: mod.displayName, thumbnailUrl: mod.thumbnailUrl },
         (deleteButton, row) => {
-          deleteButton.disabled = true;
-          deleteButton.textContent = t("Deleting...");
-          if (bridge) bridge.send({
+          sendManagedRequest(listContainer.closest('[data-okdev-dialog]'), {
             type: "delete-champion-mod",
             championId: window.__okdevManageChampionId,
             modName: mod.modName,
@@ -4206,9 +3698,7 @@
           });
         },
         (renameButton, row, newName) => {
-          renameButton.disabled = true;
-          renameButton.textContent = t("Saving...");
-          if (bridge) bridge.send({
+          sendManagedRequest(listContainer.closest('[data-okdev-dialog]'), {
             type: "rename-champion-mod",
             championId: window.__okdevManageChampionId,
             modName: mod.modName,
@@ -4231,6 +3721,7 @@
       Number(payload.championId) === Number(window.__okdevManageChampionId)
     ) {
       openChampionModsList(payload.championId);
+      if (!payload.success) showManagedFailure(document.getElementById("champion-mods-manage-dialog"), payload.error || t("Operation failed"));
     }
   }
 
@@ -4245,6 +3736,7 @@
       Number(payload.championId) === Number(window.__okdevManageChampionId)
     ) {
       openChampionModsList(payload.championId);
+      if (!payload.success) showManagedFailure(document.getElementById("champion-mods-manage-dialog"), payload.error || t("Operation failed"));
     }
   }
 
@@ -4258,7 +3750,7 @@
     );
     window.__okdevManageCategory = category;
 
-    if (bridge) bridge.send({
+    sendManagedRequest(document.getElementById("category-mods-manage-dialog"), {
       type: "request-manage-category-mods",
       category: category,
     });
@@ -4270,7 +3762,10 @@
     const listContainer = document.getElementById("category-mods-manage-dialog-list");
     if (!listContainer) return;
 
+    const owner = document.getElementById("category-mods-manage-dialog");
+    finishManagedRequest(owner);
     listContainer.innerHTML = "";
+    if (payload.error) { showManagedFailure(owner, payload.error); return; }
     const mods = payload.mods || [];
     if (mods.length === 0) {
       listContainer.innerHTML = `<div style="color: #cdbe91; text-align: center; padding: 20px; font-family: 'Beaufort for LOL', serif;">${escapeHtml(t("No custom mods installed in this category."))}</div>`;
@@ -4282,18 +3777,14 @@
         listContainer,
         { name: mod.name, displayName: mod.displayName },
         (deleteButton) => {
-          deleteButton.disabled = true;
-          deleteButton.textContent = t("Deleting...");
-          if (bridge) bridge.send({
+          sendManagedRequest(listContainer.closest('[data-okdev-dialog]'), {
             type: "delete-category-mod",
             category: window.__okdevManageCategory,
             modName: mod.name,
           });
         },
         (renameButton, row, newName) => {
-          renameButton.disabled = true;
-          renameButton.textContent = t("Saving...");
-          if (bridge) bridge.send({
+          sendManagedRequest(listContainer.closest('[data-okdev-dialog]'), {
             type: "rename-category-mod",
             category: window.__okdevManageCategory,
             modName: mod.name,
@@ -4315,6 +3806,7 @@
       payload.category === window.__okdevManageCategory
     ) {
       openCategoryModsList(payload.category);
+      if (!payload.success) showManagedFailure(document.getElementById("category-mods-manage-dialog"), payload.error || t("Operation failed"));
     }
   }
 
@@ -4329,6 +3821,7 @@
       payload.category === window.__okdevManageCategory
     ) {
       openCategoryModsList(payload.category);
+      if (!payload.success) showManagedFailure(document.getElementById("category-mods-manage-dialog"), payload.error || t("Operation failed"));
     }
   }
 
@@ -4368,6 +3861,9 @@
   }
 
   function handleChampionSkinsResponse(payload) {
+    // A response for a previous selection must never replace this champion's
+    // targets, including when the old request finished after Back was used.
+    if (Number(payload.championId) !== Number(window.__okdevSelectedChampionId)) return;
     const loadingIndicator = document.getElementById("skin-loading");
     if (loadingIndicator) {
       loadingIndicator.style.display = "none";
@@ -4447,23 +3943,33 @@
 
       const front = document.createElement("div");
       front.className = "skin-card-face skin-card-front";
-      front.dataset.targetSkinId = String(baseSkinId);
-      front.setAttribute("role", "button");
-      front.setAttribute("aria-pressed", "false");
+      const targetButton = document.createElement("button");
+      targetButton.type = "button";
+      targetButton.className = "skin-target";
+      targetButton.dataset.targetSkinId = String(baseSkinId);
+      targetButton.setAttribute("aria-pressed", "false");
+      targetButton.setAttribute("aria-label", skin.name || t("Skin {id}", { id: baseSkinId }));
+      const placeholder = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      placeholder.classList.add('skin-placeholder');
+      placeholder.setAttribute('viewBox', '0 0 100 120');
+      placeholder.setAttribute('aria-hidden', 'true');
+      placeholder.innerHTML = '<path d="M50 5 90 26 83 82 50 113 17 82 10 26Z M50 18 77 33 72 76 50 96 28 76 23 33Z M33 46 50 60 67 46 59 75 50 82 41 75Z"/>';
+      targetButton.appendChild(placeholder);
 
       const img = document.createElement("img");
       img.src = getTilePath(skin);
       img.alt = skin.name || t("Skin {id}", { id: baseSkinId });
       img.loading = "lazy";
       img.onerror = function () { this.style.display = "none"; };
-      front.appendChild(img);
+      targetButton.appendChild(img);
 
-      const nameEl = document.createElement("div");
+      const nameEl = document.createElement("span");
       nameEl.className = "skin-name";
       nameEl.textContent = skin.name || t("Skin {id}", { id: baseSkinId });
-      front.appendChild(nameEl);
+      targetButton.appendChild(nameEl);
+      front.appendChild(targetButton);
 
-      front.addEventListener("click", () => handleSkinSelection(championId, baseSkinId));
+      targetButton.addEventListener("click", () => handleSkinSelection(championId, baseSkinId));
 
       if (chromas.length > 0) {
         const chromaButton = document.createElement("button");
@@ -4475,6 +3981,12 @@
           event.preventDefault();
           event.stopPropagation();
           card.classList.add("is-flipped");
+          front.inert = true;
+          front.setAttribute("aria-hidden", "true");
+          const back = card.querySelector('.skin-card-back');
+          back.inert = false;
+          back.removeAttribute('aria-hidden');
+          back.querySelector('button')?.focus();
         });
         front.appendChild(chromaButton);
       }
@@ -4483,6 +3995,8 @@
       if (chromas.length > 0) {
         const back = document.createElement("div");
         back.className = "skin-card-face skin-card-back";
+        back.inert = true;
+        back.setAttribute('aria-hidden', 'true');
 
         const backHeader = document.createElement("div");
         backHeader.className = "skin-card-back-header";
@@ -4496,6 +4010,11 @@
           event.preventDefault();
           event.stopPropagation();
           card.classList.remove("is-flipped");
+          back.inert = true;
+          back.setAttribute('aria-hidden', 'true');
+          front.inert = false;
+          front.removeAttribute('aria-hidden');
+          front.querySelector('.skin-chroma-button')?.focus();
         });
         backHeader.appendChild(backButton);
 
@@ -4550,9 +4069,10 @@
       log("info", "Mod import cancelled");
     } else if (payload.error) {
       log("error", `Failed to import mod: ${escapeHtml(payload.error)}`);
-      // Could show an error message to user here
+      showSettingsFeedback(tAny(payload.error), true);
     } else {
       log("info", `Imported mod: ${payload.modName || payload.path || "success"}`);
+      showSettingsFeedback(t("Mod imported: {name}", {name: payload.modName || t("Custom mod")}));
     }
   }
 
@@ -4571,13 +4091,14 @@
     // If already open, close it
     const existing = document.getElementById("okdev-diagnostics-dialog");
     if (existing) {
-      existing.remove();
+      removeOwnedDialog(existing);
       diagnosticsDialog = null;
       return;
     }
 
     const dialog = document.createElement("div");
     dialog.id = "okdev-diagnostics-dialog";
+    prepareOwnedDialog(dialog, "Troubleshooting");
     dialog.style.position = "fixed";
     dialog.style.top = "0";
     dialog.style.left = "0";
@@ -4597,7 +4118,7 @@
     backdrop.style.pointerEvents = "auto";
     backdrop.addEventListener("click", (e) => {
       if (e.target === backdrop) {
-        dialog.remove();
+        removeOwnedDialog(dialog);
         diagnosticsDialog = null;
       }
     });
@@ -4605,24 +4126,15 @@
 
     const panel = document.createElement("div");
     panel.style.position = "absolute";
-    // Center relative to the Settings flyout (not the whole client window)
-    // Fallback to viewport center if the flyout can't be found.
-    let centerX = window.innerWidth / 2;
-    let centerY = window.innerHeight / 2;
-    try {
-      const settingsFlyout = document.getElementById(FLYOUT_ID);
-      if (settingsFlyout) {
-        const r = settingsFlyout.getBoundingClientRect();
-        centerX = r.left + r.width / 2;
-        centerY = r.top + r.height / 2;
-      }
-    } catch (e) {}
-
-    panel.style.left = `${centerX}px`;
-    panel.style.top = `${centerY}px`;
+    panel.style.left = "50%";
+    panel.style.top = "50%";
     panel.style.transform = "translate(-50%, -50%)";
     panel.style.width = "520px";
-    panel.style.maxWidth = "92vw";
+    panel.style.maxWidth = "calc(100vw - 24px)";
+    panel.style.maxHeight = "calc(100vh - 24px)";
+    panel.style.boxSizing = "border-box";
+    panel.style.display = "flex";
+    panel.style.flexDirection = "column";
     panel.style.background = "#0b0f14";
     panel.style.border = "1px solid #463714";
     panel.style.boxShadow = "0 10px 30px rgba(0,0,0,0.6)";
@@ -4658,7 +4170,7 @@
     closeBtn.style.fontFamily = "'Beaufort for LOL', serif";
     closeBtn.style.fontSize = "18px";
     closeBtn.addEventListener("click", () => {
-      dialog.remove();
+      removeOwnedDialog(dialog);
       diagnosticsDialog = null;
     });
     panel.appendChild(closeBtn);
@@ -4673,6 +4185,8 @@
     body.style.background = "#070a0e";
     body.style.padding = "10px";
     body.style.maxHeight = "220px";
+    body.style.minHeight = "0";
+    body.style.overflowWrap = "anywhere";
     body.style.overflow = "auto";
     body.style.lineHeight = "1.35";
     body.textContent = t("Loading…");
@@ -4681,35 +4195,16 @@
     const foot = document.createElement("div");
     foot.id = "okdev-diagnostics-foot";
     foot.style.marginTop = "8px";
-    foot.style.color = "#7e6f4e";
+    foot.style.color = "#b8b1a3";
+    foot.style.overflowWrap = "anywhere";
+    foot.style.maxHeight = "25vh";
+    foot.style.overflowY = "auto";
     foot.style.fontFamily = "'Beaufort for LOL', serif";
     foot.style.fontSize = "11px";
     panel.appendChild(foot);
 
     backdrop.appendChild(panel);
     diagnosticsDialog = dialog;
-
-    // After layout, clamp the panel inside the viewport (avoids off-screen when flyout is near an edge).
-    try {
-      requestAnimationFrame(() => {
-        try {
-          const pr = panel.getBoundingClientRect();
-          const margin = 12;
-          let dx = 0;
-          let dy = 0;
-          if (pr.left < margin) dx = margin - pr.left;
-          if (pr.right > window.innerWidth - margin) dx = (window.innerWidth - margin) - pr.right;
-          if (pr.top < margin) dy = margin - pr.top;
-          if (pr.bottom > window.innerHeight - margin) dy = (window.innerHeight - margin) - pr.bottom;
-          if (dx || dy) {
-            const curLeft = parseFloat(panel.style.left) || centerX;
-            const curTop = parseFloat(panel.style.top) || centerY;
-            panel.style.left = `${curLeft + dx}px`;
-            panel.style.top = `${curTop + dy}px`;
-          }
-        } catch (e) {}
-      });
-    } catch (e) {}
 
     requestDiagnostics();
     renderDiagnosticsDialog();
@@ -4879,9 +4374,9 @@
                 <span style="font-weight:800; color:#c89b3c;">${idx + 1}.</span>
                 ${tsHtml}
                 <span style="font-weight:700; flex:1;">${title}</span>
-                <button class="okdev-diagnostics-delete" data-key="${escapeHtml(e?.key || e?.text || "")}" title="${escapeHtml(t("Delete this error"))}" style="
-                  border:none; background:none; color:#cdbe91; cursor:pointer; padding:0 2px; font-size:14px; line-height:1;
-                ">&#x2715;</button>
+                <button class="okdev-diagnostics-delete" data-key="${escapeHtml(e?.key || e?.text || "")}" aria-label="${escapeHtml(t("Delete this error"))}" title="${escapeHtml(t("Delete this error"))}" style="
+                  border:none; background:none; color:#cdbe91; cursor:pointer; padding:4px; width:24px; height:24px; flex:0 0 24px;
+                "><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
               </div>
               ${
                 detailsHtml
@@ -4979,8 +4474,17 @@
   }
 
   function closeSettingsPanel() {
-    closeLanguageMenu();
     if (!settingsPanel) return;
+    const closingPanel = settingsPanel;
+    settingsPanel = null;
+    closingPanel.dispose?.();
+    closingPanel.querySelector('[data-okdev-dialog]')?.removeAttribute('data-okdev-dialog');
+    document.querySelectorAll('[data-okdev-dialog]').forEach(removeOwnedDialog);
+    delete window.__okdevManageChampionId;
+    delete window.__okdevManageCategory;
+    delete window.__okdevChampionRenderer;
+    delete window.__okdevAllChampions;
+    if (closingPanel.opener?.isConnected) closingPanel.opener.focus();
 
     // Disable selected nav item
     const navItem = document.querySelector(".menu_item_Golden");
@@ -5012,9 +4516,8 @@
 
     const cleanup = () => {
       try {
-        if (settingsPanel) settingsPanel.remove();
+        closingPanel.remove();
       } catch (e) {}
-      settingsPanel = null;
     };
 
     // Prefer the built-in flyout animation when available.

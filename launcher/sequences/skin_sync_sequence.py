@@ -32,8 +32,8 @@ class SkinSyncSequence:
         """
         updater_log.info("Starting skin verification sequence.")
         dialog.clear_transfer_text()
-        dialog.set_detail("Verifying skin library…")
-        dialog.set_status("Checking installed skins…")
+        dialog.set_detail("Kostüm kütüphanesi doğrulanıyor…")
+        dialog.set_status("Yüklü kostümler kontrol ediliyor…")
         dialog.set_marquee(True)
         dialog.pump_messages()
 
@@ -45,9 +45,9 @@ class SkinSyncSequence:
         needs_full_download = not (have_skins and have_previews)
 
         if needs_full_download:
-            dialog.set_status("Downloading latest skins…")
+            dialog.set_status("Kostüm dosyaları indiriliyor…")
         else:
-            dialog.set_status("Checking for skin updates…")
+            dialog.set_status("Kostüm güncellemeleri kontrol ediliyor…")
 
         dialog.set_marquee(False)
         dialog.reset_progress()
@@ -80,8 +80,8 @@ class SkinSyncSequence:
                 )
                 updater_log.info(f"Skin download completed with success={success}")
             except Exception as exc:  # noqa: BLE001
-                log.error(f"Skin download failed: {exc}")
-                dialog.set_status(f"Skin download failed: {exc}")
+                log.error(f"Kostüm indirilemedi: {exc}")
+                dialog.set_status(f"Kostüm indirilemedi: {exc}")
                 dialog.set_progress(0)
                 dialog.pump_messages()
                 updater_log.exception("Skin download raised an exception", exc_info=True)
@@ -90,14 +90,14 @@ class SkinSyncSequence:
 
         if success:
             status_checker.mark_download_process_complete()
-            dialog.set_status("Skins ready.")
+            dialog.set_status("Kostümler hazır.")
             dialog.set_progress(100)
             dialog.clear_transfer_text()
             dialog.pump_messages()
             time.sleep(0.4)
             updater_log.info("Skin library synchronized successfully.")
         else:
-            dialog.set_status("Skin download failed. Continuing…")
+            dialog.set_status("Kostüm indirilemedi. Başlatmaya devam ediliyor…")
             dialog.set_progress(0)
             dialog.clear_transfer_text()
             dialog.pump_messages()

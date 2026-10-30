@@ -144,6 +144,8 @@ def organize_output():
 
 def main():
     """Main build process"""
+    from sync_release_version import synchronize, component_metadata
+    synchronize()
     print_header("OKDEV - PyInstaller Build")
 
     start_time = time.time()
@@ -168,13 +170,17 @@ def main():
     elif not build_cslol_stub():
         sys.exit(1)
 
-    if subprocess.run([sys.executable, str(ROOT / "scripts/build_okdev_core.py")], cwd=ROOT).returncode:
+    if "--skip-core" in sys.argv[1:]:
+        if not (ROOT / 'Pengu Loader/core.dll').is_file():
+            raise SystemExit('Existing Pengu core is required with --skip-core')
+    elif subprocess.run([sys.executable, str(ROOT / "scripts/build_okdev_core.py")], cwd=ROOT).returncode:
         sys.exit(1)
     if not build_with_pyinstaller():
         sys.exit(1)
 
     subprocess.run([sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean", "--onefile",
         "--windowed", "--name", "OKDEV-Updater", "--icon", str(ROOT / "assets/icon.ico"),
+        "--version-file", str(component_metadata('OKDEV-Updater', 'OKDEV-Updater.exe', 'OKDEV Güncelleyici')),
         "--distpath", str(ROOT / "dist/OKDEV"), "--workpath", str(ROOT / "build/updater"),
         "--specpath", str(ROOT / "build"), str(ROOT / "okdev_update_helper.py")], cwd=ROOT, check=True)
     if not organize_output():

@@ -120,6 +120,6 @@ def create_lcu_disconnection_handler(state: SharedState, skin_scraper: LCUSkinSc
                 app_status.update_status(force=True)
             except Exception as e:
                 log.debug(f"[Main] Failed to update app status after disconnection: {e}")
-    
+
     return on_lcu_disconnected
 

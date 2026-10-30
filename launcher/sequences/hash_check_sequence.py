@@ -28,15 +28,15 @@ class HashCheckSequence:
         """
         # Skip hash check in dev mode
         if dev_mode:
-            updater_log.info("Hash check skipped (dev mode)")
-            dialog.set_status("Hash check skipped (dev mode)")
+            updater_log.info("Dosya doğrulaması geliştirme modunda atlandı")
+            dialog.set_status("Dosya doğrulaması geliştirme modunda atlandı")
             dialog.pump_messages()
             return
         
         updater_log.info("Starting game hash verification sequence.")
         dialog.clear_transfer_text()
-        dialog.set_detail("Verifying game hashes…")
-        dialog.set_status("Checking game hashes…")
+        dialog.set_detail("Oyun dosyaları doğrulanıyor…")
+        dialog.set_status("Oyun dosya bilgileri kontrol ediliyor…")
         dialog.set_marquee(True)
         dialog.pump_messages()
         
@@ -86,15 +86,15 @@ class HashCheckSequence:
                 # Don't raise - allow app to continue, but log the error
             else:
                 if updated:
-                    updater_log.info("Game hashes updated successfully")
-                    dialog.set_status("Game hashes updated successfully")
+                    updater_log.info("Oyun dosya bilgileri güncellendi")
+                    dialog.set_status("Oyun dosya bilgileri güncellendi")
                 else:
                     updater_log.info("Game hashes are up to date")
-                    dialog.set_status("Game hashes are valid")
+                    dialog.set_status("Oyun dosya bilgileri doğrulandı")
                 dialog.pump_messages()
         except Exception as exc:  # noqa: BLE001
-            log.error(f"Hash check failed: {exc}")
-            dialog.set_status(f"Hash check failed: {exc}")
+            log.error(f"Dosya doğrulaması tamamlanamadı: {exc}")
+            dialog.set_status(f"Dosya doğrulaması tamamlanamadı: {exc}")
             dialog.pump_messages()
             updater_log.exception("Hash check raised an exception", exc_info=True)
             # Don't raise - allow app to continue even if hash check fails

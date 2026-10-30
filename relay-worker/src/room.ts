@@ -13,6 +13,7 @@ interface MemberInfo {
   summoner_name: string;
   skin?: SkinInfo;
   joined_at?: number;
+  connected_at?: number;
 }
 
 interface SkinInfo {
@@ -25,6 +26,8 @@ interface SkinInfo {
 
 export class PartyRoom extends DurableObject {
   private static MAX_MEMBERS = 10;
+  private static MAX_PENDING = 2;
+  private static JOIN_TIMEOUT_MS = 15_000;
   // Clients ping every 25s; a socket silent for longer is gone (PC asleep,
   // network lost...) even though no close frame arrived
   private static STALE_MS = 90_000;
@@ -42,15 +45,17 @@ export class PartyRoom extends DurableObject {
   async fetch(request: Request): Promise<Response> {
     const active = this.openSockets();
 
-    if (active.length >= PartyRoom.MAX_MEMBERS) {
+    const pending = active.filter(ws => !ws.deserializeAttachment()?.summoner_id);
+    if (pending.length >= PartyRoom.MAX_PENDING) {
       this.log('full', { open: active.length });
-      return new Response('Room is full', { status: 409 });
+      return new Response('Too many pending joins', { status: 429 });
     }
 
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
 
     this.ctx.acceptWebSocket(server);
+    server.serializeAttachment({ connected_at: Date.now() });
     this.log('connect', { open: active.length + 1, v: new URL(request.url).searchParams.get('v') });
 
     // Send current member list to the new joiner
@@ -71,12 +76,24 @@ export class PartyRoom extends DurableObject {
       return;
     }
 
+    if (!msg || typeof msg !== 'object') return;
     switch (msg.type) {
       case 'join': {
+        if (!Number.isSafeInteger(msg.summoner_id) || msg.summoner_id <= 0) {
+          this.closeSocket(ws, 'invalid join');
+          return;
+        }
+        const members = this.getMembers();
+        if (!members.some(member => member.summoner_id === msg.summoner_id)
+            && members.length >= PartyRoom.MAX_MEMBERS) {
+          ws.send(JSON.stringify({ type: 'error', code: 'ROOM_FULL' }));
+          this.closeSocket(ws, 'room full');
+          return;
+        }
         // Member announces themselves
         const info: MemberInfo = {
           summoner_id: msg.summoner_id,
-          summoner_name: msg.summoner_name || 'Unknown',
+          summoner_name: typeof msg.summoner_name === 'string' ? msg.summoner_name.slice(0, 100) : 'Unknown',
           joined_at: Date.now(),
         };
         ws.serializeAttachment(info);
@@ -98,7 +115,7 @@ export class PartyRoom extends DurableObject {
       case 'skin': {
         // Member updated their skin selection
         const existing = ws.deserializeAttachment() as MemberInfo | null;
-        if (existing) {
+        if (existing?.summoner_id) {
           existing.skin = msg.skin || null;
           ws.serializeAttachment(existing);
           this.broadcastMembers();
@@ -151,8 +168,10 @@ export class PartyRoom extends DurableObject {
       if (ws.readyState !== WebSocket.READY_STATE_OPEN) continue;
       const info = ws.deserializeAttachment() as MemberInfo | null;
       const lastPing = this.ctx.getWebSocketAutoResponseTimestamp(ws)?.getTime();
-      const lastSeen = lastPing ?? info?.joined_at ?? now;
-      const staleMs = lastPing === undefined ? PartyRoom.NEVER_PINGED_STALE_MS : PartyRoom.STALE_MS;
+      const joined = !!info?.summoner_id;
+      const lastSeen = joined ? (lastPing ?? info?.joined_at ?? 0) : (info?.connected_at ?? 0);
+      const staleMs = !joined ? PartyRoom.JOIN_TIMEOUT_MS :
+        (lastPing === undefined ? PartyRoom.NEVER_PINGED_STALE_MS : PartyRoom.STALE_MS);
       if (now - lastSeen > staleMs) {
         this.closeSocket(ws, 'stale');
         continue;

@@ -119,6 +119,19 @@ def _choose_mod_file() -> Optional[Path]:
                 pass
 
 
+def _category_selection_result(success, error=None):
+    result = {'type': 'category-selection-result', 'success': success, 'error': error}
+    try:
+        from hub import library
+        data = library.installed(strict=True)
+        result['selected'] = {category: [m['relative_path'] for m in data.values()
+                                        if m.get('category') == category and m['enabled'] and library.mod_available(m)]
+                              for category in library.CATEGORIES if category != 'skins'}
+    except Exception:
+        pass  # Preserve the original failure even if the index cannot be read.
+    return result
+
+
 class MessageHandler:
     """Handles routing and processing of WebSocket messages"""
     
@@ -192,6 +205,10 @@ class MessageHandler:
             payload = json.loads(message)
         except json.JSONDecodeError as exc:
             log.warning("[SkinMonitor] Invalid payload: %s (%s)", message, exc)
+            return
+
+        if not isinstance(payload, dict) or not isinstance(payload.get('type'), str):
+            log.warning('[SkinMonitor] Ignoring message without a valid type')
             return
         
         payload_type = payload.get("type")
@@ -1025,6 +1042,7 @@ class MessageHandler:
         historic_mod_path = None
         try:
             from utils.core.historic import get_historic_skin_for_champion, is_custom_mod_path, get_custom_mod_path
+            from hub.client_sync import champion_history as get_historic_skin_for_champion
             if champion_id:
                 historic_value = get_historic_skin_for_champion(champion_id)
                 if historic_value and is_custom_mod_path(historic_value):
@@ -1047,8 +1065,15 @@ class MessageHandler:
         except Exception as e:
             log.warning('[SkinMonitor] Could not resolve saved custom mod for skin; it will not be restored: %s', e)
 
+        from hub import library as hub_library
+        committed = hub_library.active_mod(champion_id)
+        authoritative = any(m.get('category', 'skins') == 'skins' and m.get('champion_id') == champion_id
+                            for m in hub_library.installed(strict=True).values())
         response_payload = {
             "type": "skin-mods-response",
+            "selectionAuthoritative": authoritative,
+            "selection": ({'relativePath': committed['relative_path'], 'skinId': committed['skin_id']}
+                          if committed else None),
             "requestId": payload.get("requestId"),
             "championId": champion_id,
             "skinId": skin_id,
@@ -1271,13 +1296,15 @@ class MessageHandler:
         # Get historic mod and add it to response
         historic_map_path = None
         try:
-            from utils.core.mod_historic import get_historic_mod
+            from hub.client_sync import category_history as get_historic_mod
             historic_map_path = get_historic_mod("map")
         except Exception as e:
             log.warning('[SkinMonitor] Could not load saved map selection; it will not be restored: %s', e)
         
+        from hub.client_sync import category_authoritative
         response_payload = {
             "type": "maps-response",
+            "selectionAuthoritative": category_authoritative('maps', historic_map_path),
             "maps": maps,
             "historicMod": historic_map_path,  # Add historic mod identifier
             "timestamp": int(time.time() * 1000),
@@ -1302,13 +1329,15 @@ class MessageHandler:
         # Get historic mod and add it to response
         historic_font_path = None
         try:
-            from utils.core.mod_historic import get_historic_mod
+            from hub.client_sync import category_history as get_historic_mod
             historic_font_path = get_historic_mod("font")
         except Exception as e:
             log.warning('[SkinMonitor] Could not load saved font selection; it will not be restored: %s', e)
         
+        from hub.client_sync import category_authoritative
         response_payload = {
             "type": "fonts-response",
+            "selectionAuthoritative": category_authoritative('fonts', historic_font_path),
             "fonts": fonts,
             "historicMod": historic_font_path,  # Add historic mod identifier
             "timestamp": int(time.time() * 1000),
@@ -1333,13 +1362,15 @@ class MessageHandler:
         # Get historic mod and add it to response
         historic_announcer_path = None
         try:
-            from utils.core.mod_historic import get_historic_mod
+            from hub.client_sync import category_history as get_historic_mod
             historic_announcer_path = get_historic_mod("announcer")
         except Exception as e:
             log.warning('[SkinMonitor] Could not load saved announcer selection; it will not be restored: %s', e)
         
+        from hub.client_sync import category_authoritative
         response_payload = {
             "type": "announcers-response",
+            "selectionAuthoritative": category_authoritative('announcers', historic_announcer_path),
             "announcers": announcers,
             "historicMod": historic_announcer_path,  # Add historic mod identifier
             "timestamp": int(time.time() * 1000),
@@ -1364,7 +1395,7 @@ class MessageHandler:
         # Get historic mod and add it to response
         historic_other_paths = None
         try:
-            from utils.core.mod_historic import get_historic_mod
+            from hub.client_sync import category_history as get_historic_mod
             historic_other_paths = get_historic_mod("other")
             # Convert to list if it's a single string (legacy format)
             if isinstance(historic_other_paths, str):
@@ -1372,8 +1403,10 @@ class MessageHandler:
         except Exception as e:
             log.warning('[SkinMonitor] Could not load saved other mods selection; it will not be restored: %s', e)
         
+        from hub.client_sync import category_authoritative
         response_payload = {
             "type": "others-response",
+            "selectionAuthoritative": category_authoritative('others', historic_other_paths),
             "others": others,
             "historicMod": historic_other_paths,  # List of historic mod identifiers (or None)
             "timestamp": int(time.time() * 1000),
@@ -1432,110 +1465,123 @@ class MessageHandler:
 
         payload = {**payload, "championId": champion_id, "skinId": skin_id}
 
-        # Handle deselection (mod_id is null)
+        # Resolve and clear under one library lock. A profile may have changed
+        # the selection while the client retained an older in-memory snapshot.
         if mod_id is None:
-            # Clear selected mod if it matches this skin, and remove extracted files so it
-            # doesn't keep injecting after being unchecked.
-            selected_custom_mod = getattr(self.shared_state, "selected_custom_mod", None)
-            selected_target_skin_ids = set()
-            if selected_custom_mod:
-                try:
-                    selected_target_skin_ids = {
-                        int(value)
-                        for value in selected_custom_mod.get("target_skin_ids", ())
-                        if int(value) > 0
-                    }
-                except (TypeError, ValueError):
+            try:
+                from hub import library as hub_library
+                with hub_library.mutation_lock():
+                    committed = hub_library.active_mod(champion_id)
+                    if committed:
+                        self.shared_state.selected_custom_mod = committed
+                    # Clear selected mod if it matches this skin, and remove extracted files so it
+                    # doesn't keep injecting after being unchecked.
+                    selected_custom_mod = getattr(self.shared_state, "selected_custom_mod", None)
                     selected_target_skin_ids = set()
-            selected_matches_skin = bool(
-                selected_custom_mod
-                and selected_custom_mod.get("champion_id") == champion_id
-                and (
-                    selected_custom_mod.get("skin_id") in self._get_compatible_skin_ids(skin_id)
-                    or selected_custom_mod.get("storage_skin_id") in self._get_compatible_skin_ids(skin_id)
-                    or bool(selected_target_skin_ids & self._get_compatible_skin_ids(skin_id))
-                )
-            )
-            requested_mod_id = payload.get("expectedModId") or payload.get("modId")
-            selected_matches_requested_mod = True
-            if selected_custom_mod and requested_mod_id:
-                selected_identifiers = {
-                    self._normalize_mod_identifier(selected_custom_mod.get("relative_path")),
-                    self._normalize_mod_identifier(selected_custom_mod.get("mod_name")),
-                }
-                selected_matches_requested_mod = (
-                    self._normalize_mod_identifier(requested_mod_id) in selected_identifiers
-                )
-
-            should_clear_selection = (
-                selected_custom_mod
-                and selected_matches_requested_mod
-                and (selected_matches_skin or bool(requested_mod_id))
-            )
-            if should_clear_selection:
-                # If this mod was saved as "historic" for auto-selection, clear it too.
-                # Otherwise InjectionTrigger will auto-reselect it at injection time.
-                try:
-                    from utils.core.historic import (
-                        clear_historic_entry,
-                        get_historic_skin_for_champion,
-                        is_custom_mod_path,
-                        get_custom_mod_path,
+                    if selected_custom_mod:
+                        try:
+                            selected_target_skin_ids = {
+                                int(value)
+                                for value in selected_custom_mod.get("target_skin_ids", ())
+                                if int(value) > 0
+                            }
+                        except (TypeError, ValueError):
+                            selected_target_skin_ids = set()
+                    selected_matches_skin = bool(
+                        selected_custom_mod
+                        and selected_custom_mod.get("champion_id") == champion_id
+                        and (
+                            selected_custom_mod.get("skin_id") in self._get_compatible_skin_ids(skin_id)
+                            or selected_custom_mod.get("storage_skin_id") in self._get_compatible_skin_ids(skin_id)
+                            or bool(selected_target_skin_ids & self._get_compatible_skin_ids(skin_id))
+                        )
                     )
+                    requested_mod_id = payload.get("expectedModId") or payload.get("modId")
+                    selected_matches_requested_mod = True
+                    if selected_custom_mod and requested_mod_id:
+                        selected_identifiers = {
+                            self._normalize_mod_identifier(selected_custom_mod.get("relative_path")),
+                            self._normalize_mod_identifier(selected_custom_mod.get("mod_name")),
+                        }
+                        selected_matches_requested_mod = (
+                            self._normalize_mod_identifier(requested_mod_id) in selected_identifiers
+                        )
 
-                    champ_id = self.shared_state.selected_custom_mod.get("champion_id")
-                    rel_path = self.shared_state.selected_custom_mod.get("relative_path")
-                    if champ_id and rel_path:
-                        historic_value = get_historic_skin_for_champion(int(champ_id))
-                        if historic_value is not None and is_custom_mod_path(historic_value):
-                            historic_path = get_custom_mod_path(historic_value)
-                            if historic_path and historic_path.replace("\\", "/") == str(rel_path).replace("\\", "/"):
-                                clear_historic_entry(int(champ_id))
-                                log.info("[HISTORIC] Cleared saved custom mod for champion %s", champ_id)
-                except Exception as exc:
-                    log.debug("[HISTORIC] Failed to clear saved custom mod on deselect: %s", exc)
+                    should_clear_selection = (
+                        selected_custom_mod
+                        and selected_custom_mod.get("champion_id") == champion_id
+                        and selected_matches_requested_mod
+                        and (selected_matches_skin or bool(requested_mod_id))
+                    )
+                    if should_clear_selection:
+                        from hub.client_sync import select as sync_selection
+                        sync_selection('skins', [], champion_id=champion_id)
+                        # If this mod was saved as "historic" for auto-selection, clear it too.
+                        # Otherwise InjectionTrigger will auto-reselect it at injection time.
+                        try:
+                            from utils.core.historic import (
+                                clear_historic_entry,
+                                get_historic_skin_for_champion,
+                                is_custom_mod_path,
+                                get_custom_mod_path,
+                            )
 
-                # Best-effort cleanup: remove the extracted mod folder only (do NOT wipe other mods).
-                try:
-                    mod_folder_name = self.shared_state.selected_custom_mod.get("mod_folder_name")
-                    injector = getattr(getattr(self.injection_manager, "injector", None), "mods_dir", None)
-                    if mod_folder_name and self.injection_manager and getattr(self.injection_manager, "injector", None):
-                        mods_dir = self.injection_manager.injector.mods_dir
-                        extracted_path = mods_dir / str(mod_folder_name)
-                        if extracted_path.exists() or is_junction(extracted_path):
-                            safe_remove_entry(extracted_path)
-                            log.info("[SkinMonitor] Removed extracted custom mod folder: %s", extracted_path)
-                except Exception as exc:
-                    log.debug("[SkinMonitor] Failed to cleanup extracted custom mod on deselect: %s", exc)
+                            champ_id = self.shared_state.selected_custom_mod.get("champion_id")
+                            rel_path = self.shared_state.selected_custom_mod.get("relative_path")
+                            if champ_id and rel_path:
+                                historic_value = get_historic_skin_for_champion(int(champ_id))
+                                if historic_value is not None and is_custom_mod_path(historic_value):
+                                    historic_path = get_custom_mod_path(historic_value)
+                                    if historic_path and historic_path.replace("\\", "/") == str(rel_path).replace("\\", "/"):
+                                        clear_historic_entry(int(champ_id))
+                                        log.info("[HISTORIC] Cleared saved custom mod for champion %s", champ_id)
+                        except Exception as exc:
+                            log.debug("[HISTORIC] Failed to clear saved custom mod on deselect: %s", exc)
 
-                self.shared_state.selected_custom_mod = None
-                log.info(f"[SkinMonitor] Custom mod deselected for skin {skin_id}")
+                        # Best-effort cleanup: remove the extracted mod folder only (do NOT wipe other mods).
+                        try:
+                            mod_folder_name = self.shared_state.selected_custom_mod.get("mod_folder_name")
+                            injector = getattr(getattr(self.injection_manager, "injector", None), "mods_dir", None)
+                            if mod_folder_name and self.injection_manager and getattr(self.injection_manager, "injector", None):
+                                mods_dir = self.injection_manager.injector.mods_dir
+                                extracted_path = mods_dir / str(mod_folder_name)
+                                if extracted_path.exists() or is_junction(extracted_path):
+                                    safe_remove_entry(extracted_path)
+                                    log.info("[SkinMonitor] Removed extracted custom mod folder: %s", extracted_path)
+                        except Exception as exc:
+                            log.debug("[SkinMonitor] Failed to cleanup extracted custom mod on deselect: %s", exc)
 
-                # Broadcast deactivated custom mod state to JavaScript
-                try:
-                    if self.shared_state and hasattr(self.shared_state, 'ui_skin_thread') and self.shared_state.ui_skin_thread:
-                        self.shared_state.ui_skin_thread._broadcast_custom_mod_state()
-                except Exception as e:
-                    log.debug(f"[SkinMonitor] Failed to broadcast custom mod state on deselect: {e}")
-                self._send_custom_mod_selection_result(
-                    payload,
-                    success=True,
-                    operation="deselect",
-                )
-            elif selected_custom_mod and requested_mod_id and not selected_matches_requested_mod:
-                log.info("[SkinMonitor] Ignoring stale custom mod deselection for %s", requested_mod_id)
-                self._send_custom_mod_selection_result(
-                    payload,
-                    success=False,
-                    operation="deselect",
-                    error="A different custom mod is already selected",
-                )
-            else:
-                self._send_custom_mod_selection_result(
-                    payload,
-                    success=True,
-                    operation="deselect",
-                )
+                        self.shared_state.selected_custom_mod = None
+                        log.info(f"[SkinMonitor] Custom mod deselected for skin {skin_id}")
+
+                        # Broadcast deactivated custom mod state to JavaScript
+                        try:
+                            if self.shared_state and hasattr(self.shared_state, 'ui_skin_thread') and self.shared_state.ui_skin_thread:
+                                self.shared_state.ui_skin_thread._broadcast_custom_mod_state()
+                        except Exception as e:
+                            log.debug(f"[SkinMonitor] Failed to broadcast custom mod state on deselect: {e}")
+                        self._send_custom_mod_selection_result(
+                            payload,
+                            success=True,
+                            operation="deselect",
+                        )
+                    elif selected_custom_mod and requested_mod_id and not selected_matches_requested_mod:
+                        log.info("[SkinMonitor] Ignoring stale custom mod deselection for %s", requested_mod_id)
+                        self._send_custom_mod_selection_result(
+                            payload,
+                            success=False,
+                            operation="deselect",
+                            error="A different custom mod is already selected",
+                        )
+                    else:
+                        self._send_custom_mod_selection_result(
+                            payload,
+                            success=True,
+                            operation="deselect",
+                        )
+            except Exception as exc:
+                log.error('[SkinMonitor] Could not commit custom mod deselection: %s', exc)
+                self._send_custom_mod_selection_result(payload, success=False, operation='deselect', error=str(exc))
             return
 
         selected_mod = None
@@ -1651,12 +1697,9 @@ class MessageHandler:
                 log.info("[SkinMonitor] Other mods selected - keeping existing mods and adding skin mod")
             
             extract_cache_dir = get_injection_dir() / ".extract_cache"
-            if mod_source.is_dir():
-                mod_dest = injector.mods_dir / mod_source.name
-            elif mod_source.is_file() and mod_source.suffix.lower() in {".zip", ".fantome"}:
-                mod_dest = injector.mods_dir / mod_source.stem
-            else:
-                mod_dest = injector.mods_dir / mod_folder_name
+            from utils.core.junction import staging_name
+            mod_folder_name = staging_name(mod_source)
+            mod_dest = injector.mods_dir / mod_folder_name
             if mod_dest.exists() or is_junction(mod_dest):
                 safe_remove_entry(mod_dest)
             link_or_extract(mod_source, mod_dest, cache_dir=extract_cache_dir)
@@ -1677,6 +1720,10 @@ class MessageHandler:
                 "relative_path": str(selected_mod.path.relative_to(self.mod_storage.mods_root)).replace("\\", "/"),
             }
             
+            from hub.client_sync import select as sync_selection
+            sync_selection('skins', [self.shared_state.selected_custom_mod['relative_path']],
+                           champion_id=champion_id, skin_id=skin_id)
+
             # Disable HistoricMode if active (custom mod takes priority)
             if getattr(self.shared_state, 'historic_mode_active', False):
                 self.shared_state.historic_mode_active = False
@@ -1729,6 +1776,8 @@ class MessageHandler:
         """Dismiss the active custom mod selection (close-button on popup)"""
         if not getattr(self.shared_state, "selected_custom_mod", None):
             return
+        from hub.client_sync import select as sync_selection
+        sync_selection('skins', [], champion_id=self.shared_state.selected_custom_mod.get('champion_id'))
 
         # Clean up extracted mod folder
         try:
@@ -1821,8 +1870,9 @@ class MessageHandler:
             }))
             return
         try:
-            deleted = self.mod_storage.delete_champion_mod(
-                champion_id,
+            from hub.library import remove_client_mod
+            deleted = remove_client_mod(
+                self.mod_storage, champion_id=champion_id,
                 mod_name=mod_name,
                 relative_path=relative_path,
             )
@@ -1920,7 +1970,8 @@ class MessageHandler:
             }))
             return
         try:
-            deleted = self.mod_storage.delete_category_mod(category, mod_name)
+            from hub.library import remove_client_mod
+            deleted = remove_client_mod(self.mod_storage, category=category, mod_name=mod_name)
             if deleted:
                 self._clear_category_selection_if_matches(category, mod_name)
                 log.info(
@@ -1997,9 +2048,9 @@ class MessageHandler:
             }))
             return
         try:
-            display_name = self.mod_storage.set_champion_mod_display_name(
-                champion_id,
-                new_name,
+            from hub.client_sync import rename
+            display_name = rename(
+                self.mod_storage, champion_id=champion_id, name=new_name,
                 mod_name=mod_name,
                 relative_path=relative_path,
             )
@@ -2047,11 +2098,8 @@ class MessageHandler:
             }))
             return
         try:
-            display_name = self.mod_storage.set_category_mod_display_name(
-                category,
-                mod_name,
-                new_name,
-            )
+            from hub.client_sync import rename
+            display_name = rename(self.mod_storage, category=category, mod_name=mod_name, name=new_name)
             log.info(
                 "[RenameMod] Renamed category mod: category=%s, mod=%s -> %s",
                 category,
@@ -2112,457 +2160,110 @@ class MessageHandler:
             log.debug("[Dismiss] Failed to broadcast historic state: %s", exc)
 
     def _handle_select_map(self, payload: dict) -> None:
-        """Handle map mod selection for injection"""
-        if not self.mod_storage:
-            log.warning("[SkinMonitor] Cannot handle map selection - mod storage not available")
-            return
-        
-        map_id = payload.get("mapId")
-        map_data = payload.get("mapData", {})
-        
-        # Handle deselection (map_id is null)
-        if map_id is None:
-            if hasattr(self.shared_state, 'selected_map_mod') and self.shared_state.selected_map_mod:
-                self.shared_state.selected_map_mod = None
-                log.info(f"[SkinMonitor] Map mod deselected")
-                # Clear historic mod when deselected
-                try:
-                    from utils.core.mod_historic import clear_historic_mod
-                    clear_historic_mod("map")
-                    log.debug("[MOD_HISTORIC] Cleared historic map mod")
-                except Exception as e:
-                    log.debug(f"[MOD_HISTORIC] Failed to clear historic map mod: {e}")
-            return
-        
-        try:
-            # Find the mod in storage
-            entries = self.mod_storage.list_mods_for_category(self.mod_storage.CATEGORY_MAPS)
-            selected_mod = None
-            # map_data contains: id (relative path), name, path, updatedAt, description
-            mod_identifier = map_data.get("id") or map_data.get("name") or map_id
-            for entry_dict in entries:
-                # Match by id (relative path) or name
-                if (entry_dict.get("id") == mod_identifier or 
-                    entry_dict.get("name") == mod_identifier):
-                    # Convert dict to Path for extraction
-                    mod_path = self.mod_storage.mods_root / entry_dict["path"].replace("/", "\\")
-                    selected_mod = type('ModEntry', (), {
-                        'mod_name': entry_dict["name"],
-                        'path': mod_path
-                    })()
-                    break
-            
-            if not selected_mod:
-                log.warning(f"[SkinMonitor] Map mod not found: {map_id}")
-                return
-            
-            # Extract mod immediately when selected
-            if not self.injection_manager:
-                log.warning("[SkinMonitor] Cannot extract map mod - injection manager not available")
-                return
-                
-            injector = self.injection_manager.injector
-            if not injector:
-                log.warning("[SkinMonitor] Cannot extract map mod - injector not available")
-                return
+        MessageHandler._handle_select_category(self, payload, 'maps', 'map')
 
-            mod_source = Path(selected_mod.path)
-            if not mod_source.exists():
-                log.error(f"[SkinMonitor] Map mod file not found: {mod_source}")
-                return
-
-            # Determine mod folder name
-            if mod_source.is_dir():
-                mod_folder_name = mod_source.name
-            elif mod_source.is_file() and mod_source.suffix.lower() in {".zip", ".fantome"}:
-                mod_folder_name = mod_source.stem
-            else:
-                mod_folder_name = mod_source.stem
-
-            # Extract/copy mod to injection mods directory immediately
-            # Don't clean mods directory - we want to keep skin mod if it exists
-            # Just ensure the map mod is extracted
-            
-            extract_cache_dir = get_injection_dir() / ".extract_cache"
-            if mod_source.is_dir():
-                mod_dest = injector.mods_dir / mod_source.name
-            elif mod_source.is_file() and mod_source.suffix.lower() in {".zip", ".fantome"}:
-                mod_dest = injector.mods_dir / mod_source.stem
-            else:
-                mod_dest = injector.mods_dir / mod_folder_name
-            if mod_dest.exists() or is_junction(mod_dest):
-                safe_remove_entry(mod_dest)
-            link_or_extract(mod_source, mod_dest, cache_dir=extract_cache_dir)
-            log.info(f"[SkinMonitor] Linked/extracted map mod to: {mod_dest}")
-
-            # Store selected map mod in shared state for injection
-            self.shared_state.selected_map_mod = {
-                "mod_name": selected_mod.mod_name,
-                "mod_path": str(selected_mod.path),
-                "mod_folder_name": mod_folder_name,
-                "relative_path": str(selected_mod.path.relative_to(self.mod_storage.mods_root)).replace("\\", "/"),
-            }
-            
-            log.info(f"[SkinMonitor] Map mod selected and extracted: {selected_mod.mod_name}")
-            log.info(f"[SkinMonitor] Map mod ready for injection alongside skin")
-
-        except Exception as e:
-            log.error(f"[SkinMonitor] Failed to handle map selection: {e}")
-            import traceback
-            log.debug(f"[SkinMonitor] Traceback: {traceback.format_exc()}")
-    
     def _handle_select_font(self, payload: dict) -> None:
-        """Handle font mod selection for injection"""
-        if not self.mod_storage:
-            log.warning("[SkinMonitor] Cannot handle font selection - mod storage not available")
-            return
-        
-        font_id = payload.get("fontId")
-        font_data = payload.get("fontData", {})
-        
-        # Handle deselection (font_id is null)
-        if font_id is None:
-            if hasattr(self.shared_state, 'selected_font_mod') and self.shared_state.selected_font_mod:
-                self.shared_state.selected_font_mod = None
-                log.info(f"[SkinMonitor] Font mod deselected")
-                # Clear historic mod when deselected
-                try:
-                    from utils.core.mod_historic import clear_historic_mod
-                    clear_historic_mod("font")
-                    log.debug("[MOD_HISTORIC] Cleared historic font mod")
-                except Exception as e:
-                    log.debug(f"[MOD_HISTORIC] Failed to clear historic font mod: {e}")
-            return
-        
-        try:
-            # Find the mod in storage
-            entries = self.mod_storage.list_mods_for_category(self.mod_storage.CATEGORY_FONTS)
-            selected_mod = None
-            # font_data contains: id (relative path), name, path, updatedAt, description
-            mod_identifier = font_data.get("id") or font_data.get("name") or font_id
-            for entry_dict in entries:
-                # Match by id (relative path) or name
-                if (entry_dict.get("id") == mod_identifier or 
-                    entry_dict.get("name") == mod_identifier):
-                    # Convert dict to Path for extraction
-                    mod_path = self.mod_storage.mods_root / entry_dict["path"].replace("/", "\\")
-                    selected_mod = type('ModEntry', (), {
-                        'mod_name': entry_dict["name"],
-                        'path': mod_path
-                    })()
-                    break
-            
-            if not selected_mod:
-                log.warning(f"[SkinMonitor] Font mod not found: {font_id}")
-                return
-            
-            # Extract mod immediately when selected
-            if not self.injection_manager:
-                log.warning("[SkinMonitor] Cannot extract font mod - injection manager not available")
-                return
-                
-            injector = self.injection_manager.injector
-            if not injector:
-                log.warning("[SkinMonitor] Cannot extract font mod - injector not available")
-                return
+        MessageHandler._handle_select_category(self, payload, 'fonts', 'font')
 
-            mod_source = Path(selected_mod.path)
-            if not mod_source.exists():
-                log.error(f"[SkinMonitor] Font mod file not found: {mod_source}")
-                return
-
-            # Determine mod folder name
-            if mod_source.is_dir():
-                mod_folder_name = mod_source.name
-            elif mod_source.is_file() and mod_source.suffix.lower() in {".zip", ".fantome"}:
-                mod_folder_name = mod_source.stem
-            else:
-                mod_folder_name = mod_source.stem
-
-            # Extract/copy mod to injection mods directory immediately
-            # Don't clean mods directory - we want to keep skin/map mods if they exist
-            
-            extract_cache_dir = get_injection_dir() / ".extract_cache"
-            if mod_source.is_dir():
-                mod_dest = injector.mods_dir / mod_source.name
-            elif mod_source.is_file() and mod_source.suffix.lower() in {".zip", ".fantome"}:
-                mod_dest = injector.mods_dir / mod_source.stem
-            else:
-                mod_dest = injector.mods_dir / mod_folder_name
-            if mod_dest.exists() or is_junction(mod_dest):
-                safe_remove_entry(mod_dest)
-            link_or_extract(mod_source, mod_dest, cache_dir=extract_cache_dir)
-            log.info(f"[SkinMonitor] Linked/extracted font mod to: {mod_dest}")
-
-            # Store selected font mod in shared state for injection
-            self.shared_state.selected_font_mod = {
-                "mod_name": selected_mod.mod_name,
-                "mod_path": str(selected_mod.path),
-                "mod_folder_name": mod_folder_name,
-                "relative_path": str(selected_mod.path.relative_to(self.mod_storage.mods_root)).replace("\\", "/"),
-            }
-            
-            log.info(f"[SkinMonitor] Font mod selected and extracted: {selected_mod.mod_name}")
-            log.info(f"[SkinMonitor] Font mod ready for injection alongside skin")
-
-        except Exception as e:
-            log.error(f"[SkinMonitor] Failed to handle font selection: {e}")
-            import traceback
-            log.debug(f"[SkinMonitor] Traceback: {traceback.format_exc()}")
-    
     def _handle_select_announcer(self, payload: dict) -> None:
-        """Handle announcer mod selection for injection"""
-        if not self.mod_storage:
-            log.warning("[SkinMonitor] Cannot handle announcer selection - mod storage not available")
-            return
-        
-        announcer_id = payload.get("announcerId")
-        announcer_data = payload.get("announcerData", {})
-        
-        # Handle deselection (announcer_id is null)
-        if announcer_id is None:
-            if hasattr(self.shared_state, 'selected_announcer_mod') and self.shared_state.selected_announcer_mod:
-                self.shared_state.selected_announcer_mod = None
-                log.info(f"[SkinMonitor] Announcer mod deselected")
-                # Clear historic mod when deselected
-                try:
-                    from utils.core.mod_historic import clear_historic_mod
-                    clear_historic_mod("announcer")
-                    log.debug("[MOD_HISTORIC] Cleared historic announcer mod")
-                except Exception as e:
-                    log.debug(f"[MOD_HISTORIC] Failed to clear historic announcer mod: {e}")
-            return
-        
+        MessageHandler._handle_select_category(self, payload, 'announcers', 'announcer')
+
+    def _handle_select_category(self, payload: dict, category: str, key: str) -> None:
+        """Prepare, commit and acknowledge a single-category selection."""
+        success, error = False, None
         try:
-            # Find the mod in storage
-            entries = self.mod_storage.list_mods_for_category(self.mod_storage.CATEGORY_ANNOUNCERS)
-            selected_mod = None
-            # announcer_data contains: id (relative path), name, path, updatedAt, description
-            mod_identifier = announcer_data.get("id") or announcer_data.get("name") or announcer_id
-            for entry_dict in entries:
-                # Match by id (relative path) or name
-                if (entry_dict.get("id") == mod_identifier or 
-                    entry_dict.get("name") == mod_identifier):
-                    # Convert dict to Path for extraction
-                    mod_path = self.mod_storage.mods_root / entry_dict["path"].replace("/", "\\")
-                    selected_mod = type('ModEntry', (), {
-                        'mod_name': entry_dict["name"],
-                        'path': mod_path
-                    })()
-                    break
-            
-            if not selected_mod:
-                log.warning(f"[SkinMonitor] Announcer mod not found: {announcer_id}")
-                return
-            
-            # Extract mod immediately when selected
-            if not self.injection_manager:
-                log.warning("[SkinMonitor] Cannot extract announcer mod - injection manager not available")
-                return
-                
-            injector = self.injection_manager.injector
-            if not injector:
-                log.warning("[SkinMonitor] Cannot extract announcer mod - injector not available")
-                return
+            if not self.mod_storage:
+                raise ValueError('Mod kütüphanesi hazır değil.')
+            identity = payload.get(key + 'Id')
+            relative = None
+            if identity is not None:
+                details = payload.get(key + 'Data') or {}
+                identifier = details.get('id') or details.get('path') or identity
+                entries = self.mod_storage.list_mods_for_category(category)
+                matches = [entry for entry in entries if identifier in (entry.get('id'), entry.get('path'))]
+                if not matches:
+                    matches = [entry for entry in entries if entry.get('name') == identifier]
+                if len(matches) != 1:
+                    raise ValueError('Mod bulunamadı veya adı birden fazla paketle eşleşiyor. Listeyi yenile.')
+                relative = matches[0]['path']
+                source = self.mod_storage.mods_root / relative
+                if not _is_safe_relative_path(str(relative)) or not source.resolve().is_relative_to(self.mod_storage.mods_root.resolve()):
+                    raise ValueError('Mod dosyası kütüphane klasörünün dışında.')
+                injector = self.injection_manager.injector if self.injection_manager else None
+                if not injector or not source.exists():
+                    raise ValueError('Mod dosyaları veya mod motoru hazır değil.')
+                from utils.core.junction import staging_name
+                destination = injector.mods_dir / staging_name(source)
+                if destination.exists() or is_junction(destination):
+                    safe_remove_entry(destination)
+                link_or_extract(source, destination, cache_dir=get_injection_dir() / '.extract_cache')
+            from hub.client_sync import select_category
+            from hub.integration import apply_category_selections
+            select_category(category, relative)
+            apply_category_selections(self.shared_state)
+            success = True
+            try:
+                from utils.core.mod_historic import write_historic_mod, clear_historic_mod
+                if relative:
+                    write_historic_mod(key, relative)
+                else:
+                    clear_historic_mod(key)
+            except Exception:
+                log.warning('[MOD_HISTORIC] Could not update compatibility history', exc_info=True)
+        except Exception as exc:
+            error = str(exc)
+            log.error('[SkinMonitor] %s selection failed: %s', category, exc)
+        self._send_response(json.dumps(_category_selection_result(success, error)))
 
-            mod_source = Path(selected_mod.path)
-            if not mod_source.exists():
-                log.error(f"[SkinMonitor] Announcer mod file not found: {mod_source}")
-                return
-
-            # Determine mod folder name
-            if mod_source.is_dir():
-                mod_folder_name = mod_source.name
-            elif mod_source.is_file() and mod_source.suffix.lower() in {".zip", ".fantome"}:
-                mod_folder_name = mod_source.stem
-            else:
-                mod_folder_name = mod_source.stem
-
-            # Extract/copy mod to injection mods directory immediately
-            # Don't clean mods directory - we want to keep skin/map/font mods if they exist
-            
-            extract_cache_dir = get_injection_dir() / ".extract_cache"
-            if mod_source.is_dir():
-                mod_dest = injector.mods_dir / mod_source.name
-            elif mod_source.is_file() and mod_source.suffix.lower() in {".zip", ".fantome"}:
-                mod_dest = injector.mods_dir / mod_source.stem
-            else:
-                mod_dest = injector.mods_dir / mod_folder_name
-            if mod_dest.exists() or is_junction(mod_dest):
-                safe_remove_entry(mod_dest)
-            link_or_extract(mod_source, mod_dest, cache_dir=extract_cache_dir)
-            log.info(f"[SkinMonitor] Linked/extracted announcer mod to: {mod_dest}")
-
-            # Store selected announcer mod in shared state for injection
-            self.shared_state.selected_announcer_mod = {
-                "mod_name": selected_mod.mod_name,
-                "mod_path": str(selected_mod.path),
-                "mod_folder_name": mod_folder_name,
-                "relative_path": str(selected_mod.path.relative_to(self.mod_storage.mods_root)).replace("\\", "/"),
-            }
-            
-            log.info(f"[SkinMonitor] Announcer mod selected and extracted: {selected_mod.mod_name}")
-            log.info(f"[SkinMonitor] Announcer mod ready for injection alongside skin")
-
-        except Exception as e:
-            log.error(f"[SkinMonitor] Failed to handle announcer selection: {e}")
-            import traceback
-            log.debug(f"[SkinMonitor] Traceback: {traceback.format_exc()}")
-    
     def _handle_select_other(self, payload: dict) -> None:
-        """Handle other mod selection for injection (supports multiple selections)"""
+        """Apply one effect action against the authoritative shared selection."""
         if not self.mod_storage:
-            log.warning("[SkinMonitor] Cannot handle other selection - mod storage not available")
             return
-        
-        other_id = payload.get("otherId")
-        other_data = payload.get("otherData", {})
-        action = payload.get("action", "select")  # "select" or "deselect"
-        
-        # Initialize selected_other_mods as list if it doesn't exist
-        if not hasattr(self.shared_state, 'selected_other_mods'):
-            self.shared_state.selected_other_mods = []
-        
-        # Handle deselection
-        if action == "deselect" or other_id is None:
-            if other_id:
-                # Remove specific mod from list
-                self.shared_state.selected_other_mods = [
-                    mod for mod in self.shared_state.selected_other_mods 
-                    if mod.get("relative_path") != other_data.get("id")
-                ]
-                log.info(f"[SkinMonitor] Other mod deselected: {other_id}")
-            else:
-                # Clear all (legacy support)
-                self.shared_state.selected_other_mods = []
-                log.info(f"[SkinMonitor] All other mods deselected")
-            # Persist historic selection per category (ui/voiceover/loading_screen/vfx/sfx/others)
-            try:
-                from utils.core.mod_historic import write_historic_mod, clear_historic_mod
-
-                # Rebuild per-category lists from current selection state
-                by_cat = {"ui": [], "voiceover": [], "loading_screen": [], "vfx": [], "sfx": [], "others": []}
-                for m in (self.shared_state.selected_other_mods or []):
-                    rp = str(m.get("relative_path") or "").replace("\\", "/").lstrip("/")
-                    if not rp:
-                        continue
-                    cat = (rp.split("/", 1)[0] if "/" in rp else rp).strip().lower()
-                    if cat not in by_cat:
-                        cat = "others"
-                    by_cat[cat].append(rp)
-
-                for cat, paths in by_cat.items():
-                    if paths:
-                        write_historic_mod(cat, paths)
-                    else:
-                        clear_historic_mod(cat)
-            except Exception as e:
-                log.debug(f"[MOD_HISTORIC] Failed to update category historic after deselect: {e}")
-            return
-        
+        success, error = False, None
         try:
-            # other_data contains: id (relative path), name, path, updatedAt, description
-            rel_path = other_data.get("path") or other_data.get("id") or other_id
-            if not rel_path:
-                log.warning("[SkinMonitor] Other mod selection missing path/id")
-                return
-            if not _is_safe_relative_path(str(rel_path)):
-                log.warning("[SkinMonitor] Blocked unsafe other mod path: %s", rel_path)
-                return
-
-            mod_path = self.mod_storage.mods_root / str(rel_path).replace("/", "\\")
-            selected_mod = type("ModEntry", (), {
-                "mod_name": other_data.get("name") or other_id or mod_path.name,
-                "path": mod_path,
-            })()
-            
-            # Extract mod immediately when selected
-            if not self.injection_manager:
-                log.warning("[SkinMonitor] Cannot extract other mod - injection manager not available")
-                return
-                
-            injector = self.injection_manager.injector
-            if not injector:
-                log.warning("[SkinMonitor] Cannot extract other mod - injector not available")
-                return
-
-            mod_source = Path(selected_mod.path)
-            if not mod_source.exists():
-                log.error(f"[SkinMonitor] Other mod file not found: {mod_source}")
-                return
-
-            # Determine mod folder name
-            if mod_source.is_dir():
-                mod_folder_name = mod_source.name
-            elif mod_source.is_file() and mod_source.suffix.lower() in {".zip", ".fantome"}:
-                mod_folder_name = mod_source.stem
-            else:
-                mod_folder_name = mod_source.stem
-
-            # Extract/copy mod to injection mods directory immediately via junction
-            # Don't clean mods directory - we want to keep skin/map/font/announcer mods if they exist
-            extract_cache_dir = get_injection_dir() / ".extract_cache"
-            if mod_source.is_dir():
-                mod_dest = injector.mods_dir / mod_source.name
-            elif mod_source.is_file() and mod_source.suffix.lower() in {".zip", ".fantome"}:
-                mod_dest = injector.mods_dir / mod_source.stem
-            else:
-                mod_dest = injector.mods_dir / mod_folder_name
-            if mod_dest.exists() or is_junction(mod_dest):
-                safe_remove_entry(mod_dest)
-            link_or_extract(mod_source, mod_dest, cache_dir=extract_cache_dir)
-            log.info(f"[SkinMonitor] Linked/extracted other mod to: {mod_dest}")
-
-            # Store selected other mod in shared state for injection (add to list)
-            mod_info = {
-                "mod_name": selected_mod.mod_name,
-                "mod_path": str(selected_mod.path),
-                "mod_folder_name": mod_folder_name,
-                "relative_path": str(selected_mod.path.relative_to(self.mod_storage.mods_root)).replace("\\", "/"),
-            }
-            
-            # Check if mod is already in list (by relative_path)
-            relative_path = mod_info["relative_path"]
-            existing_index = None
-            for i, existing_mod in enumerate(self.shared_state.selected_other_mods):
-                if existing_mod.get("relative_path") == relative_path:
-                    existing_index = i
-                    break
-            
-            if existing_index is None:
-                # Add new mod to list
-                self.shared_state.selected_other_mods.append(mod_info)
-                log.info(f"[SkinMonitor] Other mod selected and extracted: {selected_mod.mod_name}")
-                log.info(f"[SkinMonitor] Other mod ready for injection alongside skin (total: {len(self.shared_state.selected_other_mods)})")
-            else:
-                log.info(f"[SkinMonitor] Other mod already selected: {selected_mod.mod_name}")
-
-            # Persist historic selection per category (ui/voiceover/loading_screen/vfx/sfx/others)
+            from hub.client_sync import select_other
+            from hub.integration import apply_category_selections
+            other_id = payload.get("otherId")
+            data = payload.get("otherData") or {}
+            action = payload.get("action", "select")
+            if action not in ("select", "deselect"):
+                raise ValueError("Geçersiz mod seçimi.")
+            relative = data.get("path") or data.get("id") or other_id
+            if relative is not None and not _is_safe_relative_path(str(relative)):
+                raise ValueError("Geçersiz mod yolu.")
+            enabled = action == "select" and other_id is not None
+            # Preparing an archive can fail. Do it before publishing a selection.
+            if enabled:
+                source = self.mod_storage.mods_root / str(relative)
+                if not source.resolve().is_relative_to(self.mod_storage.mods_root.resolve()):
+                    raise ValueError('Mod dosyası kütüphane klasörünün dışında.')
+                injector = self.injection_manager.injector if self.injection_manager else None
+                if not injector or not source.exists():
+                    raise ValueError("Mod dosyaları veya mod motoru hazır değil.")
+                from utils.core.junction import staging_name
+                destination = injector.mods_dir / staging_name(source)
+                if destination.exists() or is_junction(destination):
+                    safe_remove_entry(destination)
+                link_or_extract(source, destination, cache_dir=get_injection_dir() / ".extract_cache")
+            select_other(relative if other_id is not None else None, enabled=enabled)
+            apply_category_selections(self.shared_state)
+            success = True
+            # History is only a compatibility mirror; never the transaction source.
             try:
                 from utils.core.mod_historic import write_historic_mod, clear_historic_mod
-
-                by_cat = {"ui": [], "voiceover": [], "loading_screen": [], "vfx": [], "sfx": [], "others": []}
-                for m in (self.shared_state.selected_other_mods or []):
-                    rp = str(m.get("relative_path") or "").replace("\\", "/").lstrip("/")
-                    if not rp:
-                        continue
-                    cat = (rp.split("/", 1)[0] if "/" in rp else rp).strip().lower()
-                    if cat not in by_cat:
-                        cat = "others"
-                    by_cat[cat].append(rp)
-
-                for cat, paths in by_cat.items():
+                from hub.client_sync import category_history
+                for category in ('ui', 'voiceover', 'loading_screen', 'vfx', 'sfx', 'others'):
+                    paths = category_history(category)
                     if paths:
-                        write_historic_mod(cat, paths)
+                        write_historic_mod(category, paths)
                     else:
-                        clear_historic_mod(cat)
-            except Exception as e:
-                log.debug(f"[MOD_HISTORIC] Failed to update category historic after select: {e}")
-
-        except Exception as e:
-            log.error(f"[SkinMonitor] Failed to handle other selection: {e}")
-            import traceback
-            log.debug(f"[SkinMonitor] Traceback: {traceback.format_exc()}")
+                        clear_historic_mod(category)
+            except Exception:
+                log.warning('[MOD_HISTORIC] Could not update compatibility history', exc_info=True)
+        except Exception as exc:
+            log.error('[SkinMonitor] Other mod selection failed: %s', exc)
+            error = str(exc)
+        self._send_response(json.dumps(_category_selection_result(success, error)))
 
     def _handle_request_category_mods(self, payload: dict) -> None:
         """Return the list of mods for a specific top-level category under %LOCALAPPDATA%\\OKDEV\\mods."""
@@ -2582,15 +2283,17 @@ class MessageHandler:
 
         historic_paths = None
         try:
-            from utils.core.mod_historic import get_historic_mod
+            from hub.client_sync import category_history as get_historic_mod
             historic_paths = get_historic_mod(str(category))
             if isinstance(historic_paths, str):
                 historic_paths = [historic_paths]
         except Exception as e:
             log.warning('[SkinMonitor] Could not load saved category mod selection; it will not be restored: %s', e)
 
+        from hub.client_sync import category_authoritative
         response_payload = {
             "type": "category-mods-response",
+            "selectionAuthoritative": category_authoritative(category, historic_paths),
             "category": category,
             "mods": mods,
             "historicMod": historic_paths,
@@ -2646,73 +2349,62 @@ class MessageHandler:
             self.broadcaster.broadcast_language_changed()
 
     def _handle_settings_save(self, payload: dict) -> None:
-        """Handle settings save"""
+        """Validate the complete form, then atomically commit its preferences."""
+        request_id = payload.get('requestId')
+        if not isinstance(request_id, str) or len(request_id) > 128:
+            request_id = None
+        changed_autostart = False
+        autostart_current = False
         try:
-            threshold = max(0.0, min(2.0, float(payload.get("threshold", 0.5))))
-            monitor_auto_resume_timeout = max(1, min(180, int(payload.get("monitorAutoResumeTimeout", 60))))
-            autostart = payload.get("autostart", False)
-            hide_empty_categories = bool(payload.get("hideEmptyCategories", False))
-            game_path = payload.get("gamePath", "")
-
-            set_config_option("General", "injection_threshold", f"{threshold:.2f}")
-            log.info(f"[SkinMonitor] Injection threshold updated to {threshold:.2f}s")
-            
-            set_config_option("General", "monitor_auto_resume_timeout", str(monitor_auto_resume_timeout))
-            log.info(f"[SkinMonitor] Monitor auto-resume timeout updated to {monitor_auto_resume_timeout}s")
-
-            set_config_option("General", "hide_empty_categories", "true" if hide_empty_categories else "false")
-            log.info(f"[SkinMonitor] Hide empty mod categories updated to {hide_empty_categories}")
-            
-            if game_path and game_path.strip():
-                if not self._is_valid_local_league_path(game_path):
-                    self._send_settings_save_error("League path must be a valid local League of Legends folder.")
-                    return
-                set_config_option("General", "leaguePath", game_path.strip())
-                # Try to infer and save client path
+            import math
+            from config import set_config_options
+            threshold = float(payload.get('threshold', 0.5))
+            timeout = float(payload.get('monitorAutoResumeTimeout', 60))
+            if not math.isfinite(threshold) or not math.isfinite(timeout) or not timeout.is_integer():
+                raise ValueError('Süre değerleri geçerli bir sayı olmalı.')
+            threshold = max(0.0, min(2.0, threshold))
+            timeout = max(1, min(180, int(timeout)))
+            autostart = payload.get('autostart', False)
+            hide_empty = payload.get('hideEmptyCategories', False)
+            game_path = payload.get('gamePath', '')
+            if type(autostart) is not bool or type(hide_empty) is not bool or not isinstance(game_path, str):
+                raise ValueError('Ayar biçimi geçersiz. Paneli yeniden açıp tekrar dene.')
+            game_path = game_path.strip()
+            if game_path and not self._is_valid_local_league_path(game_path):
+                raise ValueError('League yolu geçerli bir yerel League of Legends klasörü olmalı.')
+            client_path = ''
+            if game_path:
                 from injection.config.config_manager import ConfigManager
-                config_manager = ConfigManager()
-                inferred_client_path = config_manager.infer_client_path_from_league_path(game_path.strip())
-                if inferred_client_path:
-                    set_config_option("General", "clientPath", inferred_client_path)
-                    log.info(f"[SkinMonitor] League path updated to: {game_path.strip()}, client path: {inferred_client_path}")
-                else:
-                    log.info(f"[SkinMonitor] League path updated to: {game_path.strip()} (client path could not be inferred)")
-            else:
-                set_config_option("General", "leaguePath", "")
-                set_config_option("General", "clientPath", "")
-                log.info("[SkinMonitor] League path cleared, will use auto-detection")
-            
+                client_path = ConfigManager().infer_client_path_from_league_path(game_path) or ''
             autostart_current = is_registered_for_autostart()
             if autostart != autostart_current:
-                if autostart:
-                    if not is_admin():
-                        self._send_settings_save_error("Administrator privileges are required to enable auto-start.")
-                        return
-                    
-                    success, message_text = register_autostart()
-                    if success:
-                        log.info("[SkinMonitor] Auto-start registered via settings panel")
-                    else:
-                        self._send_settings_save_error(f"Failed to enable auto-start: {message_text}")
-                        return
-                else:
-                    if not is_admin():
-                        self._send_settings_save_error("Administrator privileges are required to disable auto-start.")
-                        return
-                    
-                    success, message_text = unregister_autostart()
-                    if success:
-                        log.info("[SkinMonitor] Auto-start unregistered via settings panel")
-                    else:
-                        self._send_settings_save_error(f"Failed to disable auto-start: {message_text}")
-                        return
-            
-            self._send_settings_save_success()
-            log.info("[SkinMonitor] Settings saved successfully")
-        except Exception as e:
-            log.error(f"[SkinMonitor] Failed to handle settings save: {e}")
-            self._send_settings_save_error(str(e))
-    
+                if not is_admin():
+                    raise ValueError('Otomatik başlatmayı değiştirmek için yönetici olarak çalıştır.')
+                success, message = (register_autostart if autostart else unregister_autostart)()
+                if not success:
+                    raise ValueError('Otomatik başlatma değiştirilemedi: ' + str(message))
+                changed_autostart = True
+            set_config_options('General', {
+                'injection_threshold': f'{threshold:.2f}',
+                'monitor_auto_resume_timeout': str(timeout),
+                'hide_empty_categories': 'true' if hide_empty else 'false',
+                'leaguePath': game_path, 'clientPath': client_path,
+            })
+        except Exception as exc:
+            if changed_autostart:
+                try:
+                    success, message = (register_autostart if autostart_current else unregister_autostart)()
+                    if not success:
+                        raise OSError(message)
+                except Exception as rollback:
+                    log.error('Could not restore auto-start: %s', rollback)
+                    exc = ValueError(str(exc) + ' Otomatik başlatma geri alınamadı; bu ayarı kontrol et.')
+            log.error('[SkinMonitor] Settings save failed: %s', exc)
+            self._send_settings_save_error(str(exc), request_id)
+            return
+        self._send_settings_save_success(request_id)
+        log.info('[SkinMonitor] Settings saved successfully')
+
     def _handle_skin_detection(self, payload: dict) -> None:
         """Handle skin detection message"""
         skin_name = payload.get("skin")
@@ -2746,6 +2438,9 @@ class MessageHandler:
             mod_list: List of available mods (dicts with id, name, path, etc.)
         """
         try:
+            from hub.client_sync import history_path_allowed
+            if not history_path_allowed(historic_path):
+                return
             # Find the mod in the list by matching relative path
             selected_mod_dict = None
             for mod_dict in mod_list:
@@ -2799,14 +2494,18 @@ class MessageHandler:
                 self.websocket_server.broadcast(message), self.websocket_server.loop
             )
     
-    def _send_settings_save_success(self) -> None:
+    def _send_settings_save_success(self, request_id: Optional[str] = None) -> None:
         """Send settings save success response"""
         payload = {"type": "settings-saved", "success": True}
+        if request_id:
+            payload['requestId'] = request_id
         self._send_response(json.dumps(payload))
     
-    def _send_settings_save_error(self, error: str) -> None:
+    def _send_settings_save_error(self, error: str, request_id: Optional[str] = None) -> None:
         """Send settings save error response"""
         payload = {"type": "settings-saved", "success": False, "error": error}
+        if request_id:
+            payload['requestId'] = request_id
         self._send_response(json.dumps(payload))
     
     def _cleanup_empty_skin_folders(self) -> None:
@@ -2864,10 +2563,9 @@ class MessageHandler:
                 }))
                 return
 
-            mod_folder, mod_name = self.mod_storage.import_category_mod_file(
-                category,
-                selected_mod_file,
-            )
+            from hub.library import import_client_archive, mod_folder as library_mod_folder
+            item = import_client_archive(self.mod_storage, selected_mod_file, category=category)
+            mod_folder, mod_name = library_mod_folder(item), item['folder_name']
             log.info(
                 f"[SkinMonitor] Imported {category} mod {mod_name} to {mod_folder}"
             )
@@ -3173,11 +2871,11 @@ class MessageHandler:
                     }))
                     return
 
-                mod_folder, target_manifest, mod_name = self.mod_storage.import_mod_file(
-                    champion_id,
-                    selected_mod_file,
-                    skin_ids,
-                )
+                from hub.library import import_client_archive, mod_folder as library_mod_folder
+                item = import_client_archive(self.mod_storage, selected_mod_file,
+                                             champion_id=champion_id, targets=skin_ids)
+                mod_folder, mod_name = library_mod_folder(item), item['folder_name']
+                target_manifest = self.mod_storage.get_champion_dir(champion_id) / self.mod_storage.TARGET_METADATA
                 
                 log.info(
                     f"[SkinMonitor] Imported mod for champion "

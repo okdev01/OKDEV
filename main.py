@@ -39,7 +39,7 @@ if __name__ == '__main__' and '--hub' in sys.argv:
     raise SystemExit(0)
 
 # Import from the modularized main package
-from main import main
+from main import guarded_main as main
 
 if __name__ == "__main__":
         main()

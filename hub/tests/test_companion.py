@@ -18,6 +18,24 @@ class CompanionTests(LibraryFixture):
         self.assertEqual(self.machine.apply(self.value(), now=1000), [
             ('navigate', 'https://mobalytics.gg/lol/champions/masteryi/build/jungle'), ('show', None)])
 
+    def test_hotkey_without_pick_explains_instead_of_silently_ignoring(self):
+        value = companion.hotkey_command(False, {'phase': 'Lobby', 'pick': None}, now=1000)
+        events = self.machine.apply(value, now=1000)
+        self.assertEqual([event for event, _ in events], ['explain', 'show'])
+        self.assertIn('kilitlenmiş', events[0][1])
+
+    def test_game_without_pick_has_recovery_message_and_later_build_navigates(self):
+        self.machine.apply(self.value(), now=1000)
+        value = companion.hotkey_command(False, {'phase': 'InProgress', 'pick': None}, now=1000)
+        self.assertIn('Maçtaki', self.machine.apply(value, now=1000)[0][1])
+        self.assertEqual(self.machine.apply(self.value(identity='restored'), now=1000)[0][0], 'navigate')
+
+    def test_hotkey_hides_without_requiring_a_pick(self):
+        self.assertEqual(companion.hotkey_command(True, {}, now=1000)['action'], 'hide')
+        value = companion.hotkey_command(False, {'pick': self.pick}, now=1000)
+        self.assertEqual(value['action'], 'show')
+        self.assertEqual(value['pick'], self.pick)
+
     def test_hotkey_hide_does_not_replay_previous_disk_show(self):
         disk = self.value()
         self.machine.apply(disk, now=1000)

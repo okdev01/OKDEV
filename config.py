@@ -25,7 +25,7 @@ log = logging.getLogger(__name__)
 # APPLICATION METADATA
 # =============================================================================
 
-APP_VERSION = "1.5.6"                           # Independently versioned OKDEV release
+APP_VERSION = "2.0.0"                           # Independently versioned OKDEV release
 UPSTREAM_VERSION = "1.4.4"                      # Original Rose source baseline
 APP_USER_AGENT = f"OKDEV/{APP_VERSION}"  # User-Agent header for HTTP requests
 GAME_EXECUTABLE_NAMES = ("League of Legends.exe", "League of Legends (TM) Client.exe")
@@ -164,6 +164,15 @@ def set_config_option(section: str, option: str, value: str) -> None:
             config.set(section, option, value)
     except Exception as e:
         log.warning(f"Failed to write config file: {e}")
+
+
+def set_config_options(section: str, values: dict) -> None:
+    """Commit a validated settings form once; failures propagate to the UI."""
+    with edit_config_file(get_config_file_path()) as config:
+        if section not in config:
+            config.add_section(section)
+        for option, value in values.items():
+            config.set(section, option, str(value))
 
 
 # =============================================================================
@@ -377,7 +386,7 @@ LOG_TIMESTAMP_FORMAT = "%d-%m-%Y_%H-%M-%S"  # European format, Windows-compatibl
 # Interesting game phases to log
 INTERESTING_PHASES = {
     "Lobby",
-    "Matchmaking", 
+    "Matchmaking",
     "ReadyCheck",
     "ChampSelect",
     "FINALIZATION",

@@ -56,7 +56,7 @@ class UpdateDownloader:
                             bytes_callback(bytes_read, total_size)
             return True
         except Exception as exc:  # noqa: BLE001
-            status_callback(f"Download failed: {exc}")
+            status_callback(f"Güncelleme indirilemedi: {exc}")
             updater_log.error(f"Update download failed: {exc}")
             return False
     
@@ -86,7 +86,7 @@ class UpdateDownloader:
                             fh.write(chunk)
             return True
         except Exception as exc:  # noqa: BLE001
-            status_callback(f"Warning: failed to download hash file: {exc}")
+            status_callback(f"Doğrulama bilgisi indirilemedi: {exc}")
             updater_log.warning(f"Hash file download failed: {exc}")
             return False
 
