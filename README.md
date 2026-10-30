@@ -20,7 +20,7 @@ Profiller, paketler daha sonra eklense bile taşınabilir kimlikleriyle yeniden 
 
 Ayarlar bütünüyle doğrulandıktan sonra tek seferde kaydedilir; başarısız kayıtta otomatik başlatma değişikliği geri alınır. Unicode dosya adları önbellekte doğru okunur; kullanılan çıkarma klasörleri bozuk bir damga nedeniyle değiştirilmez. Mod Merkezi `.modpkg` paketlerini de tanır. Paket doğrulaması gerçek WAD hedefi gerektirir; profil içe aktarma sınırı desteklenen 2.000 kaydı kapsayacak şekilde 4 MB'dır.
 
-Yerel kurulum: `release/OKDEV_Setup_2.0.0.exe`. Yerel güncelleme arşivi: `release/OKDEV_Update_2.0.0.zip`. Bu çalışma GitHub yayını içermez. Son arayüz çalışmasının test kanıtları, değişiklikleri ve doğrulama sınırları `output/ui2-20261030/` altında; önceki temel 2.0 çalışmasının kayıtları `output/v2-20261030/` altında tutulur. İstemci arayüzü kontrolleri yalıtılmış WebView2 ortamında yapılır; canlı League maçı doğrulaması değildir.
+Kurulum ve güncelleme dosyaları [OKDEV 2.0.0 sürümünde](https://github.com/okdev01/OKDEV/releases/tag/v2.0.0) yayımlandı. Mevcut kullanıcılar uygulama açılışındaki güncelleme kontrolünden yeni sürümü alabilir; indirme kullanıcı onayı ister ve kurulum maç/şampiyon seçimi sırasında ertelenir. Doğrulama özeti aynı yayındaki `OKDEV_2.0.0_validation.json` dosyasındadır. İstemci arayüzü kontrolleri yalıtılmış WebView2 ortamında yapılır; canlı League maçı doğrulaması değildir.
 
 ## 1.5.8: Seçim, profil ve başarısız işlem düzeltmeleri
 
