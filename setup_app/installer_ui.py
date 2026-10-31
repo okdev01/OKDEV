@@ -80,14 +80,14 @@ class InstallerWindow:
         inner.grid(row=0, column=0, sticky='ew')
         inner.columnconfigure(0, weight=1)
         self.values = [tk.StringVar(value=str(path)) for path in paths]
+        self.values[0].set('')
         specs = (
-            ('01  Patcher kaynağı', 'LTK Manager veya mevcut OKDEV kurulum klasörü.'),
-            ('02  League of Legends', 'Oyunun kurulu olduğu League of Legends veya Game klasörü.'),
-            ('03  Kurulum konumu', 'Güncellemek için mevcut OKDEV klasörünü seç.'),
+            ('01  League of Legends', 'Oyunun kurulu olduğu League of Legends veya Game klasörü.'),
+            ('02  Kurulum konumu', 'Güncellemek için mevcut OKDEV klasörünü seç.'),
         )
         self.path_descriptions = []
-        for index, ((title, description), variable) in enumerate(zip(specs, self.values)):
-            row = index * 3
+        for index, ((title, description), variable) in enumerate(zip(specs, self.values[1:]), start=1):
+            row = (index - 1) * 3
             ttk.Label(inner, text=title, style='CardHeading.TLabel').grid(row=row, column=0, columnspan=2, sticky='w', pady=(0 if index == 0 else 18, 4))
             note = ttk.Label(inner, text=description, style='CardMuted.TLabel', wraplength=630)
             note.grid(row=row + 1, column=0, columnspan=2, sticky='ew', pady=(0, 8))
@@ -110,7 +110,7 @@ class InstallerWindow:
         self.footer.grid(row=2, column=0, sticky='ew')
         self.footer.columnconfigure(0, weight=1)
         self.status_title = tk.StringVar(value='Kuruluma hazır')
-        self.status = tk.StringVar(value='Patcher dosyaları seçtiğin yerel klasörden alınır. Python kurulumu gerekmez.')
+        self.status = tk.StringVar(value='LoL skin bileşeni ilk açılışta resmî kaynaktan otomatik hazırlanır. Ayrı dosya seçmen gerekmez.')
         self.status_heading = ttk.Label(self.footer, textvariable=self.status_title, style='Status.TLabel')
         self.status_heading.grid(row=0, column=0, columnspan=2, sticky='w')
         self.status_label = ttk.Label(self.footer, textvariable=self.status, style='Muted.TLabel', wraplength=700)

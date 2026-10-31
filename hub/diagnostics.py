@@ -20,6 +20,9 @@ def collect():
         'Kurulu sürüm: ' + runtime_version if runtime_version else 'WebView2 bulunamadı. Microsoft Edge WebView2 Evergreen Runtime kurulumunu kontrol et.')
 
     base = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parents[1]))
+    from .patcher_status import collect as patcher_status
+    patcher = patcher_status()
+    add('LTK uyumluluğu', 'ok' if patcher['ready'] else 'warning', patcher['message'])
     for name, files in [
         ('Mod araçları', ['injection/tools/mod-tools.exe', 'injection/tools/cslol-dll.dll']),
         ('LTK dosyaları', ['injection/tools/ltk_patcher_host.exe', 'injection/tools/ltk_patcher_dll.dll']),

@@ -26,10 +26,10 @@ class ToolsManager:
         required_tools = [
             "mod-tools.exe",
             "cslol-dll.dll",  # OKDEV's stand-in; mod-tools.exe will not start without it
-            LTK_PATCHER_HOST,
-            LTK_PATCHER_DLL,
         ]
         missing_tools = []
+        if not self.detect_ltk_patcher():
+            missing_tools.extend([LTK_PATCHER_HOST, LTK_PATCHER_DLL])
         for tool in required_tools:
             if not (self.tools_dir / tool).exists():
                 missing_tools.append(tool)
@@ -57,8 +57,10 @@ class ToolsManager:
         The LTK Manager patcher (ltk_patcher_host.exe + ltk_patcher_dll.dll)
         serves the overlay built by mkoverlay. Users provide their own copy.
         """
-        host = self.tools_dir / LTK_PATCHER_HOST
-        if host.exists() and (self.tools_dir / LTK_PATCHER_DLL).exists():
+        from okdev_ltk_delivery import resolve_patcher_dir
+        directory = resolve_patcher_dir(self.tools_dir)
+        host = directory / LTK_PATCHER_HOST
+        if host.exists() and (directory / LTK_PATCHER_DLL).exists():
             return host
         return None
 

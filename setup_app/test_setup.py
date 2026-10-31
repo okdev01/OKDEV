@@ -14,6 +14,18 @@ import setup as installer
 
 
 class SetupTests(unittest.TestCase):
+    def test_new_install_does_not_require_manually_provided_ltk(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            game = root / 'Game'; game.mkdir()
+            (game / 'League of Legends.exe').write_bytes(b'MZ-fixture')
+            with zipfile.ZipFile(root / 'payload.zip', 'w') as archive:
+                archive.writestr('OKDEV.exe', b'MZ-app')
+            with patch.object(installer, 'RESOURCES', root):
+                target, _ = installer.install('', game, root / 'OKDEV', make_shortcut=False)
+            self.assertTrue((target / 'OKDEV.exe').exists())
+            self.assertFalse((target / '_internal/injection/tools/ltk_patcher_dll.dll').exists())
+
     def test_missing_dependencies_fail(self):
         with tempfile.TemporaryDirectory() as directory:
             with self.assertRaises(ValueError):

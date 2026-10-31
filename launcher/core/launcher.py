@@ -262,7 +262,9 @@ def _run_launcher_dialog(dev_mode: bool, test_download_fail: bool) -> None:
             except Exception as exc:  # noqa: BLE001
                 result["error"] = exc
                 log.error(f"Launcher error: {exc}", exc_info=True)
-                _show_error(f"Failed to prepare OKDEV:\n\n{exc}")
+                from okdev_ltk_update import PatcherUnavailable
+                if not isinstance(exc, PatcherUnavailable):
+                    _show_error(f"Failed to prepare OKDEV:\n\n{exc}")
                 updater_log.exception("Launcher sequence crashed", exc_info=True)
             finally:
                 dialog.allow_close()

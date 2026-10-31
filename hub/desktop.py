@@ -195,7 +195,9 @@ class Api:
         for mod_id, item in installed.items():
             item['files_available'] = library.mod_available(item)
         from . import preferences, guides, companion, selections, activity
+        from .patcher_status import collect as patcher_status
         return {'catalog': data['mods'], 'installed': installed, 'settings': settings,
+                'patcher': patcher_status(),
                 'preferences': preferences.get(), 'guide': guides.read_state(), 'companion': companion.status(),
                 'removed': library.removed(), 'profiles': profiles, 'warning': warning,
                 'downloads': self.downloads_status(), 'selection_undo': selections.undo_status(installed),

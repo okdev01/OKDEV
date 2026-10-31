@@ -48,10 +48,18 @@ def release_asset(release):
     return asset
 
 
-def download_official(destination, status):
+class PatcherUnavailable(ValueError):
+    """The library can open, but game integration must remain stopped."""
+
+
+def latest_asset():
     with requests.get(API, timeout=(10, 30), headers={'User-Agent': 'OKDEV-LTK-Updater'}) as response:
         response.raise_for_status()
-        asset = release_asset(response.json())
+        return release_asset(response.json())
+
+
+def download_official(destination, status, asset=None):
+    asset = latest_asset() if asset is None else asset
     status('Güncel LTK resmî kaynaktan indiriliyor…')
     received = 0
     with requests.get(asset['browser_download_url'], stream=True, timeout=(10, 30)) as response:
@@ -67,6 +75,25 @@ def download_official(destination, status):
     if received != asset['size'] or digest(destination) != asset['digest'].split(':')[1].lower():
         raise ValueError('LTK paketi doğrulanamadı; mevcut dosyalar korunuyor.')
     return asset
+
+
+def _rejected_release(tools, asset, game_build):
+    """Reuse only a compatibility result for the exact verified archive/build."""
+    try:
+        path = tools / '.ltk-unavailable.json'
+        if path.stat().st_size > 8192:
+            return False
+        record = json.loads(path.read_text(encoding='utf-8'))
+        return (record.get('schema') == 1 and record.get('digest') == asset['digest']
+                and record.get('game_build') == game_build)
+    except (OSError, ValueError, AttributeError):
+        return False
+
+
+def _unavailable_message(asset):
+    return (f"{asset['name']} paketindeki LTK bu oyun derlemesiyle uyumlu değil. "
+            'Aynı paket yeniden indirilmeyecek. Mod Merkezi kullanılabilir; '
+            'skin uygulaması için uyumlu bir resmî LTK sürümü gerekiyor.')
 
 
 def extract_pair(installer, output):
@@ -125,7 +152,7 @@ def install_pair(source, tools, game, asset):
     require_idle()
     status = check_ltk_patcher(source, game)
     if status.missing or status.eol is None or status.game_build is None or status.expired:
-        raise ValueError('En yeni resmî LTK bu oyun derlemesini desteklemiyor. Dosyalar değiştirilmedi.')
+        raise PatcherUnavailable('En yeni resmî LTK bu oyun derlemesini desteklemiyor. Dosyalar değiştirilmedi.')
     backup = tools / ('ltk-backup-' + uuid.uuid4().hex)
     backup.mkdir()
     old = {}
@@ -173,17 +200,40 @@ def ensure_patcher(tools, game, status=lambda text: None):
                 require_idle()
                 recover_pair(tools)
             current = check_ltk_patcher(tools, game)
+            from okdev_ltk_delivery import select_cached, sync_official
+            if select_cached(game, stage=True):
+                return False
             if not current.missing and current.eol is not None and not current.expired:
                 return False
-            if read_game_build(game) is None:
+            game_build = read_game_build(game)
+            if game_build is None:
                 raise ValueError('Oyun derlemesi okunamadı. League Game klasörünü kontrol edin.')
             require_idle()
+            if sync_official(game, status=status, timeout=30):
+                return True
+            # Check the small release metadata on each retry so a new compatible
+            # release is discovered immediately, without redownloading an archive
+            # already proved incompatible with this exact game build.
+            asset = latest_asset()
+            if _rejected_release(tools, asset, game_build):
+                raise PatcherUnavailable(_unavailable_message(asset))
             with tempfile.TemporaryDirectory(prefix='okdev-ltk-') as temp:
                 temp = Path(temp)
-                asset = download_official(temp/'ltk-setup.exe', status)
+                download_official(temp/'ltk-setup.exe', status, asset)
                 extract_pair(temp/'ltk-setup.exe', temp/'pair')
+                candidate = check_ltk_patcher(temp/'pair', game)
+                if candidate.missing or candidate.eol is None or candidate.game_build is None or candidate.expired:
+                    if sync_official(game, installer=temp/'ltk-setup.exe', status=status):
+                        (tools / '.ltk-unavailable.json').unlink(missing_ok=True)
+                        status('LoL skin bileşeni hazır.')
+                        return True
+                    with atomic_write(tools / '.ltk-unavailable.json') as stream:
+                        json.dump({'schema': 1, 'digest': asset['digest'],
+                                   'game_build': game_build, 'eol': candidate.eol}, stream)
+                    raise PatcherUnavailable(_unavailable_message(asset))
                 status('LTK doğrulanıyor ve yedekli güncelleniyor…')
                 install_pair(temp/'pair', tools, game, asset)
+            (tools / '.ltk-unavailable.json').unlink(missing_ok=True)
             status('LTK güncellendi.')
             return True
         finally:

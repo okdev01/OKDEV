@@ -721,6 +721,15 @@ if (typeof document !== 'undefined') {
     $('loadoutSummary').textContent = missing.length ? missing.length + ' modun dosyasını kontrol et.' : selected.length ? selected.length + ' etkin mod · Sonraki oyun için hazır.' : 'Bir mod etkinleştir veya kayıtlı profilini seç.';
     $('loadoutState').textContent = missing.length ? 'Eksik dosyaları tamamlaman gerekiyor' : selected.length ? selected.length + ' mod etkin · Seçimlerin kayıtlı' : 'Henüz mod seçilmedi';
     $('loadoutState').className = 'loadout-state' + (missing.length ? ' attention' : selected.length ? ' ready' : '');
+    const patcherBlocked = state.patcher?.ready === false;
+    $('patcherNotice').hidden = !patcherBlocked;
+    $('patcherNotice').textContent = patcherBlocked ? state.patcher.message : '';
+    if (patcherBlocked) {
+      $('loadoutTitle').textContent = 'Skin uygulaması hazır değil';
+      $('loadoutSummary').textContent = 'LTK uyumluluğunu Sistem durumu sayfasından kontrol et.';
+      $('loadoutState').textContent = selected.length + ' modun seçimi kayıtlı · LTK bekleniyor';
+      $('loadoutState').className = 'loadout-state attention';
+    }
     renderHomeProfile();
     const loadout = $('loadoutItems'); loadout.replaceChildren();
     selected.slice(0,3).forEach(mod => {

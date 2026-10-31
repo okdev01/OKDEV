@@ -306,7 +306,7 @@ def _sync_cslol_stub(tools_dir: Path) -> None:
         pass  # The tools check reports a missing DLL when injection needs it
 
 
-def _check_dll_present() -> bool:
+def _check_dll_present(show_dialog=True) -> bool:
     """Check that the user-provided LTK patcher is present and not past its end of life."""
     import sys
     if sys.platform != "win32":
@@ -320,7 +320,11 @@ def _check_dll_present() -> bool:
     from injection.config.config_manager import ConfigManager
     game_path = ConfigManager().load_league_path()
     game_exe = Path(game_path) / "League of Legends.exe" if game_path else None
+    from okdev_ltk_delivery import resolve_patcher_dir
+    tools_dir = resolve_patcher_dir(tools_dir, game_exe)
     status = check_ltk_patcher(tools_dir, game_exe)
+    if not show_dialog:
+        return not status.missing and status.eol is not None and not status.expired
     if status.missing:
         return _show_dll_dialog(tools_dir, reason="missing", detail=" and ".join(status.missing))
     if status.eol is None:
@@ -644,8 +648,12 @@ def main() -> None:
                 print(f"[Launcher] Launcher encountered an error: {err}")
 
     # Updates and dependency repair must remain reachable when LTK is outdated.
-    if not _check_dll_present():
-        sys.exit(1)
+    if not _check_dll_present(show_dialog=False):
+        # A missing/incompatible game dependency must not take the user's
+        # library down. This path never initializes game or injection threads.
+        from hub.desktop import run as run_library
+        run_library()
+        return
 
     run_league_unlock(args=args)
 

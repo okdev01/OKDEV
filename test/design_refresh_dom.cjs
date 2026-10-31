@@ -55,5 +55,9 @@ const drop=async paths=>{w.dispatchEvent(new w.CustomEvent('okdev-file-drop',{de
   $('menuToggle').style.display='inline-flex'; // jsdom has no responsive layout engine.
   await click('#menuToggle');assert.equal($('menuToggle').getAttribute('aria-expanded'),'true');
   d.dispatchEvent(new w.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));assert.equal($('menuToggle').getAttribute('aria-expanded'),'false');assert.equal(d.activeElement.id,'menuToggle');
-  assert.deepEqual(errors,[]);console.log('Design refresh: real-state cards, failure rollback, duplicate-click lock, focus, profiles, catalog search, favorites, drop validation, retained drafts and menu keyboard passed.');
+  state.patcher={ready:false,message:'LTK oyun derlemesini desteklemiyor.'};await click('#retryConnection');
+  assert.equal($('patcherNotice').hidden,false);assert.match($('loadoutTitle').textContent,/hazır değil/);
+  assert.match($('loadoutState').textContent,/LTK bekleniyor/);assert.equal($('loadoutState').classList.contains('ready'),false);
+  state.patcher={ready:true,message:'Uyumlu'};await click('#retryConnection');assert.equal($('patcherNotice').hidden,true);
+  assert.deepEqual(errors,[]);console.log('Design refresh: real-state cards, failure rollback, duplicate-click lock, focus, profiles, catalog search, favorites, drop validation, retained drafts, menu keyboard and LTK blocking status passed.');
 }finally{w.close();}})().catch(e=>{console.error(e);process.exitCode=1});

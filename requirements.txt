@@ -12,6 +12,7 @@ pystray==0.19.5
 xxhash==4.0.1
 zstandard==0.25.0
 pywebview==6.2.1
+PyNaCl==1.6.2
 
 # Build requirements
 pyinstaller==6.3.0

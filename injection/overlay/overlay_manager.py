@@ -471,11 +471,18 @@ class OverlayManager:
 
         log.debug(f"[INJECT] Starting LTK patcher: {host_exe}")
         try:
-            proc = subprocess.Popen(
-                [str(host_exe)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                cwd=str(host_exe.parent), creationflags=creationflags,
-                text=True, encoding="utf-8", errors="replace", bufsize=1,
-            )
+            from okdev_ltk_delivery import runtime_root
+            if host_exe.resolve().is_relative_to(runtime_root().resolve()):
+                # Delivered DLLs are user-writable and must never inherit the
+                # administrator token used by OKDEV's client integration.
+                from utils.system.user_process import popen
+                proc = popen([str(host_exe)], cwd=str(host_exe.parent))
+            else:
+                proc = subprocess.Popen(
+                    [str(host_exe)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                    cwd=str(host_exe.parent), creationflags=creationflags,
+                    text=True, encoding="utf-8", errors="replace", bufsize=1,
+                )
         except Exception as e:
             log.error(f"[INJECT] Could not start LTK patcher: {e}")
             self._report_ltk_patcher_failure(f"could not start ({e})")

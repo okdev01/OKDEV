@@ -10,6 +10,12 @@ import okdev_ltk_update as update
 
 
 class LtkUpdateTests(unittest.TestCase):
+    def setUp(self):
+        for name in ('select_cached', 'sync_official'):
+            mock = patch('okdev_ltk_delivery.' + name, return_value=None)
+            mock.start()
+            self.addCleanup(mock.stop)
+
     def asset_release(self):
         return {'tag_name': 'v1.28.1', 'assets': [{
             'name': 'LTK.Manager_1.28.1_x64-setup.exe', 'size': 10,

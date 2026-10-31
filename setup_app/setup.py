@@ -14,7 +14,7 @@ from pathlib import Path, PurePosixPath
 
 from patcher_check import read_dll_eol, read_game_build
 
-VERSION = '2.1.0'
+VERSION = '2.1.1'
 RESOURCES = Path(getattr(sys, '_MEIPASS', Path(__file__).parent))
 PATCHER_NAMES = ('ltk_patcher_host.exe', 'ltk_patcher_dll.dll')
 
@@ -80,9 +80,13 @@ def validate(patcher, game, destination):
     from okdev_install_transaction import installation_lock, recover
     with installation_lock(destination):
         recover(destination)
-    patcher, game = find_patcher(patcher), find_game(game)
+    patcher, game = find_patcher(patcher) if patcher else None, find_game(game)
     if existing_install(destination) is not None:
         check_closed(destination)
+    if patcher is None:
+        # First launch obtains and verifies the official skin dependency. Users
+        # do not need another download or a directory of manually copied DLLs.
+        return None, game, destination
     for name in PATCHER_NAMES:
         with (patcher / name).open('rb') as stream:
             if stream.read(2) != b'MZ':
@@ -148,9 +152,10 @@ def _install(patcher, game, destination, make_shortcut=True, progress=lambda tex
         retire_legacy_plugins(staging / '_internal/Pengu Loader')
         tools = staging / '_internal/injection/tools'
         tools.mkdir(parents=True, exist_ok=True)
-        progress('Seçtiğiniz LTK dosyaları kopyalanıyor…')
-        for name in PATCHER_NAMES:
-            shutil.copy2(patcher / name, tools / name)
+        if patcher is not None:
+            progress('Seçtiğiniz LTK dosyaları kopyalanıyor…')
+            for name in PATCHER_NAMES:
+                shutil.copy2(patcher / name, tools / name)
         (staging / 'okdev-install.json').write_text(json.dumps({
             **(previous or {}),
             'install_id': previous['install_id'] if previous else str(uuid.uuid4()),
@@ -213,7 +218,7 @@ def detect_paths():
                 game = str(find_game(metadata['game_dir']))
     except ValueError:
         pass
-    return patcher, game, destination
+    return '', game, destination
 
 
 def gui(smoke=False):

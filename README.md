@@ -2,6 +2,12 @@
 
 Windows için bağımsız sürümlenen OKDEV istemcisi.
 
+## 2.1.1: LoL skin bileşeninin otomatik hazırlanması
+
+LTK'nin yeni dağıtım akışı desteklenir. OKDEV, gerektiğinde değiştirilmemiş resmî LTK Manager paketini SHA-256 ile doğrulayıp hazırlar; resmî istemcinin aldığı kararlı kanal manifestini ve DLL imzasını ayrıca doğrular. Desteklenen host ile skin uygulaması Windows kullanıcısının normal yetkilerinde çalışır. Resmî servisin erişim bilgileri kopyalanmaz ve OKDEV paketinde LTK ikili dosyaları dağıtılmaz.
+
+İlk kurulumda ayrı LTK klasörü veya DLL seçilmez. Uyumlu bileşen hazırsa başlangıçta yeniden indirilmez. Uyumsuzluğu doğrulanan aynı arşiv aynı oyun derlemesi için tekrar indirilmez; yeni resmî sürüm kontrolü devam eder. Uyumluluk sağlanamazsa durum açıkça gösterilir ve oyun entegrasyonu başlatılmaz.
+
 ## 2.1.0: Yeni Mod Merkezi ve skin seçimi düzeltmesi
 
 Mod Merkezi; yeni ana ekran, yerel görseller, tutarlı kartlar, dar pencereye uyarlanan gezinme ve klavye erişimiyle yeniden tasarlandı. Ana ekran gerçek profil, seçim ve hazırlık durumunu gösterir. Arama yüklü modlarla birlikte katalog sonuçlarını da kapsar; dosyalar sürükleyip bırakılarak doğrulanmış içe aktarma akışına alınabilir.
