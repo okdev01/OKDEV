@@ -86,6 +86,15 @@ def select(category, paths, *, champion_id=None, skin_id=None):
         wanted = {str(path).replace('\\', '/') for path in paths}
         if wanted - {item['relative_path'] for item in data.values()}:
             reconcile(data=data)
+        eligible = {item['relative_path']: item for item in data.values()
+                    if item.get('category', 'skins') == category
+                    and (category != 'skins' or item['champion_id'] == champion_id)}
+        if wanted - eligible.keys():
+            raise ValueError('Seçilen mod artık bu şampiyon veya kategoride yok. Listeyi yenile.')
+        if category not in library.MULTI_CATEGORIES and len(wanted) > 1:
+            raise ValueError('Bu şampiyon veya kategori için tek mod seç.')
+        if any(not library.mod_available(eligible[path]) for path in wanted):
+            raise ValueError('Mod dosyaları bulunamadı. Modu yeniden ekle.')
         changed = False
         for item in data.values():
             if item.get('category', 'skins') != category or (category == 'skins' and item['champion_id'] != champion_id):

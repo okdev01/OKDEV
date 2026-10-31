@@ -234,6 +234,8 @@ def link_or_extract(
     source: Path,
     dest: Path,
     cache_dir: Path,
+    *,
+    staging_dir: Path | None = None,
 ) -> None:
     """Place mod content at *dest* using the fastest available method.
 
@@ -259,7 +261,7 @@ def link_or_extract(
             cache_key = str(cache_dir.resolve())
             if time.monotonic() - _cache_sweeps.get(cache_key, float('-inf')) >= 60:
                 try:
-                    prune_extraction_cache(cache_dir, dest.parent, protected=[cached])
+                    prune_extraction_cache(cache_dir, staging_dir if staging_dir is not None else dest.parent, protected=[cached])
                 except OSError as exc:
                     log.warning(f'[JUNCTION] Cache cleanup deferred: {exc}')
                 _cache_sweeps[cache_key] = time.monotonic()

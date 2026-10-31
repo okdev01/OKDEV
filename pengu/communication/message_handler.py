@@ -1680,14 +1680,6 @@ class MessageHandler:
                 )
                 return
 
-            # Determine mod folder name
-            if mod_source.is_dir():
-                mod_folder_name = mod_source.name
-            elif mod_source.is_file() and mod_source.suffix.lower() in {".zip", ".fantome"}:
-                mod_folder_name = mod_source.stem
-            else:
-                mod_folder_name = mod_source.stem
-
             # Extract/copy mod to injection mods directory immediately
             # Check if other mods (map/font/announcer/other) are already selected
             # If so, don't clean - just extract the skin mod alongside them
@@ -1704,25 +1696,11 @@ class MessageHandler:
                 (selected_other_mods and len(selected_other_mods) > 0)
             )
             
-            # Only clean mods directory if no other mods are selected
-            if not has_other_mods:
-                injector._clean_mods_dir()
-            else:
-                log.info("[SkinMonitor] Other mods selected - keeping existing mods and adding skin mod")
-            
-            extract_cache_dir = get_injection_dir() / ".extract_cache"
             from utils.core.junction import staging_name
             mod_folder_name = staging_name(mod_source)
-            mod_dest = injector.mods_dir / mod_folder_name
-            if mod_dest.exists() or is_junction(mod_dest):
-                safe_remove_entry(mod_dest)
-            link_or_extract(mod_source, mod_dest, cache_dir=extract_cache_dir)
-            if not (mod_dest.exists() or is_junction(mod_dest)):
-                raise RuntimeError("The mod could not be linked or extracted into the injection folder")
-            log.info(f"[SkinMonitor] Linked/extracted mod to: {mod_dest}")
 
             # The explicitly selected skin/chroma folder is the target.
-            self.shared_state.selected_custom_mod = {
+            selection = {
                 "skin_id": int(skin_id),
                 "storage_skin_id": selected_mod.skin_id,
                 "target_skin_ids": sorted(self._get_entry_target_skin_ids(selected_mod)),
@@ -1734,9 +1712,19 @@ class MessageHandler:
                 "relative_path": str(selected_mod.path.relative_to(self.mod_storage.mods_root)).replace("\\", "/"),
             }
             
+            from hub import library as hub_library
             from hub.client_sync import select as sync_selection
-            sync_selection('skins', [self.shared_state.selected_custom_mod['relative_path']],
-                           champion_id=champion_id, skin_id=skin_id)
+            from injection.mods.selection_staging import prepare_selection
+            previous = getattr(self.shared_state, 'selected_custom_mod', None) or {}
+            with hub_library.mutation_lock():
+                with prepare_selection(
+                    mod_source, injector.mods_dir, get_injection_dir() / ".extract_cache",
+                    replace_all=not has_other_mods,
+                    previous_name=previous.get('mod_folder_name'),
+                ):
+                    sync_selection('skins', [selection['relative_path']],
+                                   champion_id=champion_id, skin_id=skin_id)
+                self.shared_state.selected_custom_mod = selection
 
             # Disable HistoricMode if active (custom mod takes priority)
             if getattr(self.shared_state, 'historic_mode_active', False):

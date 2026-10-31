@@ -9,6 +9,16 @@ from . import library
 MAX_PROFILE_BYTES = 4 * 1024 * 1024
 
 
+def _write_profiles(data):
+    # Measure the exact UTF-8 bytes that will be read, including formatting.
+    # Binary output avoids Windows newline translation exceeding the limit.
+    content = json.dumps(data, ensure_ascii=False, indent=2).encode('utf-8')
+    if len(content) > library.MAX_INDEX_BYTES:
+        raise ValueError('Profil kayıtları boyut sınırına ulaştı. Önce kullanılmayan profilleri kaldır.')
+    with library.atomic_write(library.root() / 'profiles.json', 'wb') as stream:
+        stream.write(content)
+
+
 def list_profiles(strict=False, *, resolve=False):
     path = library.root() / 'profiles.json'
     if not path.exists():
@@ -60,7 +70,7 @@ def save(name):
         selected = [m['id'] for m in data.values() if m['enabled']]
         profiles[profile_id] = {'name': name, 'mods': [m['id'] for m in data.values() if m['enabled']],
                                 'targets': skin_targets(data, selected), 'created_at': int(time.time())}
-        library.write_json(library.root() / 'profiles.json', profiles)
+        _write_profiles(profiles)
         from .activity import record
         record('profile_save', name, len(profiles[profile_id]['mods']))
         return profile_id
@@ -97,7 +107,7 @@ def remove(profile_id):
         if profile_id not in data:
             raise ValueError('Profil bulunamadı.')
         data.pop(profile_id)
-        library.write_json(library.root() / 'profiles.json', data)
+        _write_profiles(data)
 
 
 def rename(profile_id, name):
@@ -111,7 +121,7 @@ def rename(profile_id, name):
         if any(key != profile_id and p['name'].casefold() == name.casefold() for key, p in data.items()):
             raise ValueError('Bu isimde bir profil var. Farklı bir ad seç.')
         data[profile_id]['name'] = name
-        library.write_json(library.root() / 'profiles.json', data)
+        _write_profiles(data)
 
 
 def update(profile_id):
@@ -126,7 +136,7 @@ def update(profile_id):
         from .selections import skin_targets
         data[profile_id]['targets'] = skin_targets(installed, data[profile_id]['mods'])
         data[profile_id]['updated_at'] = int(time.time())
-        library.write_json(library.root() / 'profiles.json', data)
+        _write_profiles(data)
 
 
 def export_profile(profile_id):
@@ -296,7 +306,7 @@ def import_profile(document):
                                     if key in {'id', 'name', 'version', 'category', 'champion_id',
                                                'package_sha256', 'content_sha256', 'target_skin_id'}} for m in document['mods']],
                                 'created_at': int(time.time())}
-        library.write_json(library.root() / 'profiles.json', profiles)
+        _write_profiles(profiles)
         from .activity import record
         record('profile_import', name, len(preview['mods']))
         return {'id': profile_id, 'name': name, 'missing': preview['missing']}

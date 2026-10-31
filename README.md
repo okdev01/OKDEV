@@ -2,6 +2,14 @@
 
 Windows için bağımsız sürümlenen OKDEV istemcisi.
 
+## 2.1.2: Mod seçimi ve profil kayıtlarının korunması
+
+Yeni mod ayrı bir geçici klasörde hazırlanır. Paket hazırlama, klasör taşıma veya seçim kaydı başarısız olursa önceki seçim ve hazırlık dosyaları korunur; bellekteki seçim yalnızca kayıt tamamlanınca değiştirilir. Silinmiş, dosyaları eksik veya başka şampiyon/kategoriye ait mod istekleri mevcut seçimi kapatmadan reddedilir.
+
+Profil kaydetme, içe aktarma, yeniden adlandırma ve güncelleme işlemleri toplam kayıt boyutunu yazmadan önce kontrol eder. Boyut sınırını aşan işlem mevcut profil dosyasına dokunmadan bildirilir. UTF-8 karakterleri ve Windows satır sonları boyut hesabında tutarlı işlenir.
+
+10 yeni regresyon testi dahil 674 Python testi ve 14 JavaScript kontrolü geçti. Paket doğrulaması canlı maç doğrulaması değildir.
+
 ## 2.1.1: LoL skin bileşeninin otomatik hazırlanması
 
 LTK'nin yeni dağıtım akışı desteklenir. OKDEV, gerektiğinde değiştirilmemiş resmî LTK Manager paketini SHA-256 ile doğrulayıp hazırlar; resmî istemcinin aldığı kararlı kanal manifestini ve DLL imzasını ayrıca doğrular. Desteklenen host ile skin uygulaması Windows kullanıcısının normal yetkilerinde çalışır. Resmî servisin erişim bilgileri kopyalanmaz ve OKDEV paketinde LTK ikili dosyaları dağıtılmaz.
