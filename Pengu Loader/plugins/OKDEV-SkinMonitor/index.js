@@ -282,7 +282,7 @@ function logHover(skinName) {
   }
 
   console.log(`${LOG_PREFIX} Hovered skin: ${cleanName}`);
-  sendBridgePayload({ skin: cleanName, originalName: skinName, timestamp: Date.now() });
+  sendBridgePayload({ type: "skin-hover", skin: cleanName, originalName: skinName, timestamp: Date.now() });
 }
 
 function sendBridgePayload(obj) {

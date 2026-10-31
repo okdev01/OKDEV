@@ -2,6 +2,14 @@
 
 Windows için bağımsız sürümlenen OKDEV istemcisi.
 
+## 2.1.0: Yeni Mod Merkezi ve skin seçimi düzeltmesi
+
+Mod Merkezi; yeni ana ekran, yerel görseller, tutarlı kartlar, dar pencereye uyarlanan gezinme ve klavye erişimiyle yeniden tasarlandı. Ana ekran gerçek profil, seçim ve hazırlık durumunu gösterir. Arama yüklü modlarla birlikte katalog sonuçlarını da kapsar; dosyalar sürükleyip bırakılarak doğrulanmış içe aktarma akışına alınabilir.
+
+League içindeki skin seçiminin uygulamaya ulaşmasını engelleyen mesaj biçimi hatası düzeltildi. Eklenti artık türü belirtilmiş seçim mesajı gönderir; alıcı eski eklentilerin geçerli seçim mesajlarını da kabul eder. Türkçe Windows'ta yardımcı işlem çıktıları okunurken oluşabilen karakter çözümleme hatası giderildi.
+
+Mevcut kurulumlar açılıştaki güncelleme kontrolünden 2.1.0 sürümünü alabilir. Güncelleme indirildikten sonra uygulamanın kurulum akışını tamamlamasına izin verin. Skin eklentisinin yeni kodu League istemci arayüzü yeniden açıldığında yüklenir. Paket ve yalıtılmış arayüz testleri canlı maç doğrulaması değildir.
+
 ## 2.0.0: Oyun alanı, ortak seçimler ve çevrimdışı kullanım
 
 Oyun odaklı koyu tasarım, yerel vektör amblem ve yenilenen kartlarla Mod Merkezi yeniden düzenlendi. Ana ekrandaki seçim özeti etkin modları ve eksik dosyaları gösterir. **Ctrl+K** ile yüklü modlarda ve uygulama sayfalarında Türkçe karakterlerle arama yapılır; ok tuşları ve Enter ile gezinilir. Açık tema, kompakt kartlar ve hareketi azaltma seçenekleri korunur.

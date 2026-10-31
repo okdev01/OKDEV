@@ -50,7 +50,7 @@ if (typeof document !== 'undefined') {
     state.preferences = {...state.preferences, ...boot.appearance};
   }
   const categories = {skins: 'Şampiyon', ui: 'HUD / Arayüz', maps: 'Harita', fonts: 'Yazı tipi', announcers: 'Spiker', voiceover: 'Seslendirme', loading_screen: 'Yükleme ekranı', vfx: 'Görsel efekt', sfx: 'Ses efekti', others: 'Diğer'};
-  const titles = {home: 'Oyun alanın', library: 'Keşfet', installed: 'Modlarım', profiles: 'Profiller', assistants: 'Ayarlar', diagnostics: 'Sistem durumu', guides: 'Oyun rehberi', publish: 'Mod ekle', downloads: 'İndirmeler'};
+  const titles = {home: 'Genel bakış', library: 'Keşfet', installed: 'Modlarım', profiles: 'Profiller', assistants: 'Ayarlar', diagnostics: 'Sistem durumu', guides: 'Oyun rehberi', publish: 'Mod ekle', downloads: 'İndirmeler'};
   let currentPage = 'home';
   const selectedMods = new Set();
   let catalogLimit = 24, installedLimit = 24, recoveryLimit = 20, filterSignature = '';
@@ -76,6 +76,9 @@ if (typeof document !== 'undefined') {
   }
   function openCommand() {
     if (document.querySelector('dialog[open]')) return;
+    if (document.body.classList.contains('menu-open')) {
+      setMenu(false); $('searchShortcut').focus();
+    }
     $('commandSearch').value = '';
     renderCommands(); $('commandDialog').showModal(); $('commandSearch').focus();
   }
@@ -85,6 +88,11 @@ if (typeof document !== 'undefined') {
       page(id); $('title').tabIndex=-1; $('title').focus({preventScroll:true});
     }}));
     for (const mod of Object.values(state.installed)) entries.push({name:mod.name, detail:[mod.champion,categories[mod.category || 'skins'],mod.enabled?'Etkin':'Kapalı'].filter(Boolean).join(' · '), kind:'mod', action:()=>showDetail(mod,true)});
+    const discovered = new Map([...boot.sources, ...(state.catalog || [])].map(mod => [mod.id, mod]));
+    for (const mod of discovered.values()) {
+      if (state.installed[mod.id]) continue;
+      entries.push({name:mod.name, detail:['Keşfet',mod.champion,categories[mod.category || 'skins']].filter(Boolean).join(' · '), kind:'mod', action:()=>showDetail(mod,false)});
+    }
     commandEntries = entries.filter(item => tokens.every(token => HubView.normalize(item.name+' '+item.detail).includes(token)))
       .sort((a,b)=>term ? Number(b.kind==='mod')-Number(a.kind==='mod') : 0).slice(0,12);
     commandIndex=0; const target=$('commandResults'); target.replaceChildren();
@@ -152,9 +160,9 @@ if (typeof document !== 'undefined') {
   }
   function rememberFocus() {
     const focused = document.activeElement;
-    const owner = focused?.closest('.card[data-mod-id],.download-job[data-job-id],.profile-card[data-profile-id],.recovery-row[data-backup-id]');
+    const owner = focused?.closest('.card[data-mod-id],.recent-item[data-mod-id],.loadout-item[data-mod-id],.download-job[data-job-id],.profile-card[data-profile-id],.recovery-row[data-backup-id]');
     const attribute = owner && ['data-mod-id','data-job-id','data-profile-id','data-backup-id'].find(key => owner.hasAttribute(key));
-    return {focused, page:currentPage, attribute, value:attribute && owner.getAttribute(attribute),
+    return {focused, page:currentPage, ownerClass:owner?.classList[0], attribute, value:attribute && owner.getAttribute(attribute),
       index:owner ? [...owner.querySelectorAll('button,input,select,textarea')].indexOf(focused) : -1};
   }
   function focusAvailable(node) {
@@ -169,7 +177,7 @@ if (typeof document !== 'undefined') {
       saved.focused.focus({preventScroll:true}); return;
     }
     if (!saved.attribute || saved.index < 0) return;
-    const owner = [...$(currentPage).querySelectorAll('[' + saved.attribute + ']')].find(node => node.getAttribute(saved.attribute) === saved.value);
+    const owner = [...$(currentPage).querySelectorAll('[' + saved.attribute + ']')].find(node => node.getAttribute(saved.attribute) === saved.value && node.classList.contains(saved.ownerClass));
     const control = owner?.querySelectorAll('button,input,select,textarea')[saved.index];
     if (focusAvailable(control)) control.focus({preventScroll:true});
     else if (!busy) {
@@ -178,6 +186,7 @@ if (typeof document !== 'undefined') {
   }
   function page(id) {
     if (!titles[id]) return;
+    const menuWasOpen = document.body.classList.contains('menu-open');
     currentPage = id;
     document.querySelectorAll('.section').forEach(e => e.hidden = e.id !== id);
     document.querySelectorAll('nav button').forEach(e => {
@@ -185,7 +194,11 @@ if (typeof document !== 'undefined') {
       if (e.dataset.page === id) e.setAttribute('aria-current', 'page'); else e.removeAttribute('aria-current');
     });
     $('title').textContent = titles[id];
-    $('breadcrumb').textContent = id === 'home' ? 'SENİN OYUN ALANIN' : 'OKDEV / ' + ({library:'KEŞFET',installed:'KÜTÜPHANEN',guides:'MOBALYTICS',profiles:'PROFİLLER',assistants:'AYARLAR',diagnostics:'DESTEK',publish:'YENİ MOD',downloads:'İNDİRMELER'}[id] || '');
+    $('breadcrumb').textContent = 'Oyun alanın';
+    document.body.classList.remove('menu-open');
+    $('menuToggle').setAttribute('aria-expanded', 'false');
+    $('menuToggle').setAttribute('aria-label', 'Menüyü aç');
+    if (menuWasOpen) { $('title').tabIndex = -1; $('title').focus({preventScroll:true}); }
     window.scrollTo(0, 0);
     loadVisibleCovers();
   }
@@ -614,9 +627,10 @@ if (typeof document !== 'undefined') {
     const guide = state.guide || {}, pick = guide.pick, prefs = state.preferences || {}, companion = state.companion || {};
     $('gamePhase').textContent = guide.status || 'İstemci bekleniyor';
     $('gameDot').classList.toggle('connected', !!guide.connected);
-    $('homeChampion').textContent = pick ? pick.champion.name : 'Bir sonraki oyununa hazır';
-    $('homeChampionIcon').textContent = $('guideChampionIcon').textContent = pick ? pick.champion.name.slice(0, 2).toUpperCase() : '?';
-    $('homeGuideText').textContent = pick ? pick.role_label + ' · Build rehberin hazır.' : 'Şampiyonunu kilitlediğinde rehberin burada hazır olur.';
+    $('homeChampion').textContent = pick ? pick.champion.name : 'Şampiyon bekleniyor';
+    $('homeChampionIcon').textContent = pick ? pick.champion.name.slice(0, 2).toUpperCase() : 'OK';
+    $('guideChampionIcon').textContent = pick ? pick.champion.name.slice(0, 2).toUpperCase() : '?';
+    $('homeGuideText').textContent = pick ? pick.champion.name + ' · ' + pick.role_label + ' rehberini incele.' : 'Şampiyon seçtiğinde önerilerin burada.';
     $('homeHotkey').textContent = prefs.mobalytics_enabled ? 'Oyun içi kısayol · ' + prefs.mobalytics_hotkey : 'Mobalytics şu anda kapalı';
     $('guideChampion').textContent = pick ? pick.champion.name : 'Henüz şampiyon kilitlenmedi';
     $('guideRole').textContent = pick ? pick.role_label + ' · Mobalytics build rehberi' : 'League istemcisi açıkken otomatik algılanır.';
@@ -669,35 +683,76 @@ if (typeof document !== 'undefined') {
     for (const mod of plan.target_changes || []) detail.append(element('p', '', mod.name + ' · Hedef kostüm: ' + mod.skin_id));
     dialog.showModal();
   }
+  function matchingProfile() {
+    const active = Object.values(state.installed).filter(m => m.enabled).map(m => m.id).sort();
+    return Object.entries(state.profiles || {}).find(([,profile]) => !profile.missing &&
+      JSON.stringify([...profile.mods].sort()) === JSON.stringify(active) &&
+      Object.entries(profile.targets || {}).every(([id,target]) => {
+        const mod = state.installed[id];
+        return mod && (mod.selected_target_skin_id ?? mod.target_skin_ids?.[0] ?? mod.champion_id * 1000) === target;
+      }))?.[0] || '';
+  }
+  function renderHomeProfile() {
+    const select = $('homeProfile'); select.replaceChildren();
+    const current = element('option', '', 'Mevcut seçimler'); current.value = ''; select.append(current);
+    for (const [id, profile] of Object.entries(state.profiles || {})) {
+      const option = element('option', '', profile.name); option.value = id;
+      option.disabled = !!profile.missing || profile.mods.some(id => !state.installed[id] || state.installed[id].files_available === false);
+      if (option.disabled) option.textContent += ' · Eksik dosya';
+      select.append(option);
+    }
+    select.value = matchingProfile();
+  }
+  function homeArt(mod, tag, className) {
+    const art = element(tag, className); art.dataset.previewId = mod.id;
+    art.append(icon(categoryIcons[mod.category || 'skins'] || 'layers'));
+    const preview = previewFor(mod);
+    if (preview) {
+      const img = element('img'); img.src = preview; img.alt = ''; img.loading = 'lazy'; img.referrerPolicy = 'no-referrer';
+      img.onerror = () => img.remove(); art.append(img);
+    }
+    return art;
+  }
   function renderHome(locals) {
     $('navInstalled').textContent = locals.length;
-    const selected=locals.filter(mod=>mod.enabled), missing=selected.filter(mod=>mod.files_available===false);
-    $('loadoutTitle').textContent=missing.length?'Seçimlerinde eksik dosya var':selected.length?'Seçimlerin kaydedildi':'Bir sonraki oyununu hazırla';
-    $('loadoutSummary').textContent=missing.length?missing.length+' modun dosyası bulunamadı. Modlarını kontrol et.':selected.length?
-      selected.length+' etkin mod · Seçimlerin sonraki oyun hazırlanırken kullanılır.':'Kütüphanenden bir mod etkinleştir veya hazır bir profil uygula.';
-    $('loadoutState').textContent=missing.length?'Kontrol gerekli':selected.length?'Kaydedildi':'Henüz mod seçilmedi';
-    $('loadoutState').className='loadout-state'+(missing.length?' attention':selected.length?' ready':'');
-    const loadout=$('loadoutItems'); loadout.replaceChildren();
-    selected.slice(0,4).forEach(mod=>{
-      const row=button('',()=>showDetail(mod,true)); row.className='loadout-item';
-      const text=element('span'); text.append(element('strong','',mod.name),element('small','',
-        [mod.champion, categories[mod.category||'skins'], mod.files_available===false?'Dosyaları eksik':'Etkin'].filter(Boolean).join(' · ')));
-      row.append(element('span','loadout-dot'+(mod.files_available===false?' attention':'')),text); loadout.append(row);
+    const selected = locals.filter(mod => mod.enabled), missing = selected.filter(mod => mod.files_available === false);
+    $('homeActiveCount').textContent = '(' + selected.length + ')';
+    $('loadoutTitle').textContent = missing.length ? 'Bazı dosyalar eksik' : selected.length ? 'Sonraki oyun için hazırsın' : 'Oyununu kişiselleştir';
+    $('loadoutSummary').textContent = missing.length ? missing.length + ' modun dosyasını kontrol et.' : selected.length ? selected.length + ' etkin mod · Sonraki oyun için hazır.' : 'Bir mod etkinleştir veya kayıtlı profilini seç.';
+    $('loadoutState').textContent = missing.length ? 'Eksik dosyaları tamamlaman gerekiyor' : selected.length ? selected.length + ' mod etkin · Seçimlerin kayıtlı' : 'Henüz mod seçilmedi';
+    $('loadoutState').className = 'loadout-state' + (missing.length ? ' attention' : selected.length ? ' ready' : '');
+    renderHomeProfile();
+    const loadout = $('loadoutItems'); loadout.replaceChildren();
+    selected.slice(0,3).forEach(mod => {
+      const row = element('div','loadout-item'); row.dataset.modId = mod.id;
+      const title = button('', () => showDetail(mod,true)); title.className = 'loadout-info'; title.title = mod.name;
+      title.append(element('strong','',mod.name), element('small','',mod.files_available === false ? 'Dosyaları eksik' : categories[mod.category || 'skins']));
+      const toggle = button('', () => requestSelection([mod.id],'disable',false), {remote:true});
+      toggle.className = 'mod-switch'; toggle.setAttribute('role','switch'); toggle.setAttribute('aria-checked','true');
+      toggle.setAttribute('aria-label',mod.name + ' etkinliği'); toggle.title = mod.name + ' devre dışı bırak';
+      row.append(homeArt(mod,'span','loadout-art'),title,toggle); loadout.append(row);
     });
-    if (!selected.length) loadout.append(element('p','loadout-empty',locals.length?'Modların kütüphanende. Hangilerini kullanacağına sen karar ver.':'İlk modunla başla. Dosyanı ekle, bilgilerini kontrol et ve etkinleştir.'));
-    $('loadoutAction').textContent=!locals.length?'İlk modunu ekle →':selected.length>4?'Tüm '+selected.length+' seçimi gör →':'Modlarımı yönet →';
-    $('loadoutAction').onclick=()=>{page(locals.length?'installed':'publish');};
+    if (!selected.length) loadout.append(element('p','loadout-empty',locals.length ? 'Etkinleştirdiğin modlar burada görünür.' : 'İlk modunu ekle. Seçimlerini buradan yönet.'));
+    $('loadoutAction').textContent = selected.length > 3 ? 'Tümü (' + selected.length + ')' : 'Modları seç';
+    $('loadoutAction').onclick = () => page(locals.length ? 'installed' : 'publish');
     const target = $('homeRecent'); target.replaceChildren();
-    HubView.filter(locals, {sort: 'recent'}).slice(0, 3).forEach(mod => {
-      const item = button('', () => showDetail(mod, true)); item.className = 'recent-item';
-      const art = element('span', 'recent-art', (mod.champion || mod.name).slice(0, 2).toUpperCase());
-      art.dataset.previewId = mod.id;
-      const preview = previewFor(mod);
-      if (preview) { const img = element('img'); img.src = preview; img.alt = ''; img.referrerPolicy='no-referrer'; img.onerror=()=>{art.textContent=(mod.champion || mod.name).slice(0,2).toUpperCase();}; art.replaceChildren(img); }
-      const text = element('span'); text.append(element('strong', '', mod.name), element('small', '', mod.enabled ? 'Etkin · Sonraki oyun için hazır' : categories[mod.category || 'skins'])); item.append(art, text); target.append(item);
+    HubView.filter(locals,{sort:'recent'}).slice(0,3).forEach(mod => {
+      const item = element('article','recent-item'); item.dataset.modId = mod.id;
+      const art = homeArt(mod,'button','recent-art'); art.type = 'button';
+      art.setAttribute('aria-label',mod.name + ' ayrıntılarını aç'); art.onclick = () => showDetail(mod,true);
+      const body = element('div','recent-body'), title = button('',() => showDetail(mod,true));
+      title.className = 'recent-title'; title.title = mod.name; title.append(element('span','',mod.name));
+      const meta = element('div','recent-meta'), actions = element('div','recent-actions');
+      const toggle = button(mod.enabled ? 'Devre dışı bırak' : 'Etkinleştir', () => requestSelection([mod.id],mod.enabled ? 'disable' : 'enable',false),{remote:true});
+      toggle.className = 'recent-toggle'; toggle.setAttribute('aria-pressed',String(!!mod.enabled));
+      toggle.setAttribute('aria-label',mod.name + (mod.enabled ? ' devre dışı bırak' : ' etkinleştir'));
+      if (mod.files_available === false && !mod.enabled) { toggle.textContent = 'Dosya eksik'; toggle.removeAttribute('data-api'); toggle.disabled = true; }
+      actions.append(favorite(mod),toggle); meta.append(element('small','',categories[mod.category || 'skins']),actions);
+      body.append(title,meta); item.append(art,body); target.append(item);
     });
-    if (!locals.length) empty(target, 'Oyun alanını kişiselleştir', 'İlk modunu ekle veya Keşfet’ten sana uygun bir görünüm bul.');
+    if (!locals.length) empty(target,'Kütüphanen seni bekliyor','İlk modunu ekle veya Keşfet’ten sana uygun bir görünüm bul.');
   }
+
   let fullActivity = false;
   function renderActivity() {
     const activity = state.activity || {events: [], warning: ''};
@@ -903,6 +958,51 @@ if (typeof document !== 'undefined') {
     }
   });
   $('quickImport').onclick = () => page('publish');
+  $('homeChoose').onclick = () => { page('publish'); $('choose').click(); };
+  $('homeProfile').onchange = () => {
+    const id = $('homeProfile').value, profile = state.profiles?.[id];
+    renderHomeProfile();
+    if (!profile) return;
+    if (api?.preview_selection) requestSelection(profile.mods,'replace',true,profile.targets || null);
+    else act(() => api.apply_profile(id),profile.name + ' uygulandı.');
+  };
+  function setMenu(open, restore = false) {
+    document.body.classList.toggle('menu-open',open);
+    $('menuToggle').setAttribute('aria-expanded',String(open));
+    $('menuToggle').setAttribute('aria-label',open ? 'Menüyü kapat' : 'Menüyü aç');
+    if (open) document.querySelector('nav [aria-current="page"]')?.focus();
+    else if (restore) $('menuToggle').focus();
+  }
+  $('menuToggle').onclick = () => setMenu(!document.body.classList.contains('menu-open'));
+  document.addEventListener('keydown', event => {
+    if (!document.body.classList.contains('menu-open')) return;
+    if (event.key === 'Escape') { event.preventDefault(); setMenu(false,true); }
+    if (event.key === 'Tab' && window.innerWidth < 900) {
+      const items = [...$('sidebar').querySelectorAll('button:not(:disabled)'),$('menuToggle')];
+      const index = items.indexOf(document.activeElement);
+      event.preventDefault(); items[(index + (event.shiftKey ? -1 : 1) + items.length) % items.length].focus();
+    }
+  });
+  document.addEventListener('click', event => {
+    if (document.body.classList.contains('menu-open') && !event.target.closest('#sidebar,#menuToggle')) setMenu(false);
+  });
+  for (const zone of [$('homeDropzone'), document.querySelector('.file-picker')]) {
+    zone.addEventListener('dragover',event => { event.preventDefault(); if (!busy) zone.classList.add('drag-over'); });
+    zone.addEventListener('dragleave',event => { if (!zone.contains(event.relatedTarget)) zone.classList.remove('drag-over'); });
+    zone.addEventListener('drop',event => { event.preventDefault(); zone.classList.remove('drag-over'); });
+  }
+  // A dropped file is still reviewed in the existing import form.
+  window.addEventListener('okdev-file-drop',event => {
+    if (busy || !api) { notify('Önce devam eden işlemin tamamlanmasını bekle.',true); return; }
+    const paths = event.detail?.paths;
+    if (!Array.isArray(paths) || paths.length !== 1 || typeof paths[0] !== 'string' || !paths[0]) {
+      notify('Tek bir mod dosyası bırak veya Dosya seç düğmesini kullan.',true); return;
+    }
+    if (!/\.(fantome|zip|modpkg)$/i.test(paths[0])) {
+      notify('Yalnızca .fantome, .zip veya .modpkg paketleri destekleniyor.',true); return;
+    }
+    act(async () => ({ok:true,result:await api.select_mod(paths[0])}), '', {refresh:false,after: result => { acceptImportFile(result); page('publish'); }});
+  });
   let closingWindow = false;
   window.addEventListener('okdev-close-request', () => {
     if (!$('closeWindowDialog').open) $('closeWindowDialog').showModal();
@@ -1009,7 +1109,7 @@ if (typeof document !== 'undefined') {
   ['categoryFilter', 'sort', 'favoritesOnly', 'installedCategory', 'installedFilter', 'installedSort'].forEach(id => $(id).onchange = render);
   $('refresh').onclick = () => act(async () => { await reload(true); return {ok: true}; }, 'Kütüphane yenilendi.', {refresh: false});
   $('autoAccept').onchange = () => { const value = $('autoAccept').checked; act(() => api.auto_accept(value), 'Tercihin kaydedildi.'); };
-  $('choose').onclick = () => act(async () => ({ok: true, result: await api.choose_mod()}), '', {refresh: false, after: result => {
+  function acceptImportFile(result) {
     if (!result) return;
     selectedFile = true; document.querySelector('.file-picker').classList.add('selected');
     $('importError').hidden = true;
@@ -1023,7 +1123,8 @@ if (typeof document !== 'undefined') {
     }
     if (result.warning) $('importSource').textContent = result.warning;
     notify('Dosya seçildi. Bilgileri kontrol edip kütüphanene ekleyebilirsin.');
-  }});
+  }
+  $('choose').onclick = () => act(async () => ({ok: true, result: await api.choose_mod()}), '', {refresh: false, after: acceptImportFile});
   $('chooseCover').onclick = () => act(async () => ({ok: true, result: await api.choose_cover()}), '', {refresh: false, after: name => { if (name) { $('coverName').textContent = name; notify('Kapak görseli seçildi.'); } }});
   $('resetForm').onclick = () => act(() => api.prepare_import(null), 'Form temizlendi.', {refresh: false, after: () => {
     selectedFile = false; document.querySelector('.file-picker').classList.remove('selected'); $('importError').hidden = true;
@@ -1118,7 +1219,13 @@ if (typeof document !== 'undefined') {
     if (!available?.snapshot) { setConnection(false); return; }
     connecting = true; api = available;
     $('loadingBanner').hidden = false;
-    try { await act(async () => { await reload(); return {ok: true}; }, '', {refresh: false}); }
+    try {
+      await act(async () => { await reload(); return {ok: true}; }, '', {refresh: false});
+      if (api.bind_dropzones) {
+        try { await api.bind_dropzones(); }
+        catch (_) { $('homeDropHint').textContent = 'Bilgisayarından bir mod paketi seç'; }
+      }
+    }
     finally { connecting = false; $('loadingBanner').hidden = true; }
   }
   window.addEventListener('pywebviewready', connectBridge);

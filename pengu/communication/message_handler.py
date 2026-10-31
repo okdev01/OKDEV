@@ -207,8 +207,22 @@ class MessageHandler:
             log.warning("[SkinMonitor] Invalid payload: %s (%s)", message, exc)
             return
 
-        if not isinstance(payload, dict) or not isinstance(payload.get('type'), str):
+        if not isinstance(payload, dict):
             log.warning('[SkinMonitor] Ignoring message without a valid type')
+            return
+
+        # Older SkinMonitor plugins emitted hover messages without a type.
+        # Keep that specific wire format working during staggered updates;
+        # malformed untyped messages must still be rejected.
+        skin = payload.get('skin')
+        valid_skin = isinstance(skin, str) and 0 < len(skin.strip()) <= 512
+        if 'type' not in payload and valid_skin:
+            payload['type'] = 'skin-hover'
+        if not isinstance(payload.get('type'), str):
+            log.warning('[SkinMonitor] Ignoring message without a valid type')
+            return
+        if payload['type'] in {'skin-hover', 'skin-sync'} and not valid_skin:
+            log.warning('[SkinMonitor] Ignoring invalid skin selection')
             return
         
         payload_type = payload.get("type")
@@ -335,7 +349,7 @@ class MessageHandler:
             self._handle_party_remove_peer(payload)
         elif payload_type == "party-get-state":
             self._handle_party_get_state(payload)
-        elif payload.get("skin"):
+        elif payload_type in {"skin-hover", "skin-sync"}:
             # Handle skin detection message
             self._handle_skin_detection(payload)
     

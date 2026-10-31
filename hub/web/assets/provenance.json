@@ -1,0 +1,81 @@
+{
+  "version": 1,
+  "assets": [
+    {
+      "id": "hero",
+      "width": 1672,
+      "height": 941,
+      "format": "WebP",
+      "usage": "hero background",
+      "objectFit": "cover",
+      "objectPosition": "center 30%",
+      "note": "CSS crop position is a starting point; verify face visibility at actual component size.",
+      "source_file": "assets/hero-warrior.png",
+      "source_sha256": "9a15174637d98282311878889f2b497e34361bc3b87f79f7aded2d5276caed41",
+      "file": "hero-warrior.webp",
+      "sha256": "3893421cc8883d1a845a26a3873aaa5f89c711b02a79349c03b9e7afcead5cfe",
+      "encoding": "quality 90; original dimensions and composition preserved"
+    },
+    {
+      "id": "darius",
+      "width": 1672,
+      "height": 941,
+      "format": "WebP",
+      "usage": "concept mod card artwork",
+      "objectFit": "cover",
+      "objectPosition": "center center",
+      "note": "CSS crop position is a starting point; verify face visibility at actual component size.",
+      "source_file": "assets/mod-darius.png",
+      "source_sha256": "525307eb11eef43e4666b8bbe5ae6de99c6cd7abbcd9c1f9fc90f072858d09a9",
+      "file": "mod-darius.webp",
+      "sha256": "039dd45b431594315c8314055bf7443e526e964fa9aa0a69a1efed250edd6bcd",
+      "encoding": "quality 90; original dimensions and composition preserved"
+    },
+    {
+      "id": "mordekaiser",
+      "width": 1672,
+      "height": 941,
+      "format": "WebP",
+      "usage": "concept mod card artwork",
+      "objectFit": "cover",
+      "objectPosition": "center center",
+      "note": "CSS crop position is a starting point; verify face visibility at actual component size.",
+      "source_file": "assets/mod-mordekaiser.png",
+      "source_sha256": "de97b8d98658865d4203eb6b09b76af97700ace7df41c8031b367d2e2dfec308",
+      "file": "mod-mordekaiser.webp",
+      "sha256": "8b262f251b5399a0c7fb93cfa87b70e7ef2fbcca63b11158aaad489b309ecf78",
+      "encoding": "quality 90; original dimensions and composition preserved"
+    },
+    {
+      "id": "caitlyn",
+      "width": 1672,
+      "height": 941,
+      "format": "WebP",
+      "usage": "concept mod card artwork",
+      "objectFit": "cover",
+      "objectPosition": "center center",
+      "note": "CSS crop position is a starting point; verify face visibility at actual component size.",
+      "source_file": "assets/mod-caitlyn.png",
+      "source_sha256": "cb1cc29e7ac299dcf1f8862aacdd2bd1a43d59f8d0e2f5a36f42f926e7caad51",
+      "file": "mod-caitlyn.webp",
+      "sha256": "2c34686f5e9bf8e87b994d95550370558cad131c9441c832cd9f40096fd1416a",
+      "encoding": "quality 90; original dimensions and composition preserved"
+    },
+    {
+      "id": "guide",
+      "width": 1448,
+      "height": 1086,
+      "format": "WebP",
+      "usage": "guide background",
+      "objectFit": "cover",
+      "objectPosition": "center center",
+      "note": "CSS crop position is a starting point; verify face visibility at actual component size.",
+      "source_file": "assets/guide-fortress.png",
+      "source_sha256": "4e8c79de40b37cce668c561b8859dad6d84a3c2e73841f4d24faf4dfa65e0352",
+      "file": "guide-fortress.webp",
+      "sha256": "a49cf177d4fd5e1cde1c153b4e0ac54301a69887b6461c1a61c08136c10e2b25",
+      "encoding": "quality 90; original dimensions and composition preserved"
+    }
+  ],
+  "note": "User-supplied concept artwork. Hero and fortress are shell decorations. Mod artwork is reserved for the explicit design-test fixtures; never substituted for real mod previews."
+}

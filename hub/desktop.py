@@ -1,3 +1,4 @@
+import base64
 import json
 import os
 from pathlib import Path
@@ -30,9 +31,16 @@ def build_html(base=None):
     except (OSError, ValueError):
         bootstrap['appearance'] = {}
     encoded = json.dumps(bootstrap, ensure_ascii=False).replace('<', '\\u003c')
+    css = (web / 'app.css').read_text(encoding='utf-8')
+    # Bundled artwork remains offline, including when NavigateToString has no
+    # file origin. Only decorative shell images enter the initial document.
+    for name in ('hero-warrior', 'guide-fortress'):
+        asset = web / 'assets' / (name + '.webp')
+        css = css.replace('asset:' + name, 'data:image/webp;base64,' +
+                          base64.b64encode(asset.read_bytes()).decode('ascii'))
     return html.replace('/*BOOTSTRAP*/', 'window.HUB_DATA=' + encoded + ';').replace(
         '/*APP_JS*/', (web / 'app.js').read_text(encoding='utf-8')).replace(
-        '/*APP_CSS*/', (web / 'app.css').read_text(encoding='utf-8'))
+        '/*APP_CSS*/', css)
 
 
 def open_hub():
@@ -468,8 +476,16 @@ class Api:
                                                 file_types=('Mod paketi (*.fantome;*.zip;*.modpkg)',))
         if not paths:
             return None
+        return self.select_mod(paths[0])
+
+    def select_mod(self, path):
+        """Shared validation for the native picker and dropped files."""
         from .package_info import inspect
-        selected = Path(paths[0])
+        selected = Path(path)
+        if selected.suffix.lower() not in ('.fantome', '.zip', '.modpkg'):
+            raise ValueError('Yalnızca .fantome, .zip veya .modpkg paketleri destekleniyor.')
+        if not selected.is_file():
+            raise ValueError('Dosya bulunamadı. Bilgisayarından bir mod paketi seç.')
         result = inspect(selected)
         if self._source:
             detected = result['suggested'].get('champion_id')
@@ -478,6 +494,27 @@ class Api:
             result['suggested'] = {key: value for key, value in result['suggested'].items() if key == 'version'}
         self._selected = selected
         return result
+
+    def bind_dropzones(self):
+        """Use WebView2's native file paths; never read a fake browser path."""
+        from webview.dom import DOMEventHandler
+        if getattr(self, '_dropzones_bound', False):
+            return True
+
+        def dropped(event):
+            files = event.get('dataTransfer', {}).get('files', [])
+            paths = [file.get('pywebviewFullPath') for file in files]
+            payload = json.dumps({'paths': paths}, ensure_ascii=True)
+            self._window.evaluate_js(
+                "window.dispatchEvent(new CustomEvent('okdev-file-drop',{detail:" + payload + '}));')
+
+        for selector in ('#homeDropzone', '.file-picker'):
+            node = self._window.dom.get_element(selector)
+            if node is None:
+                raise ValueError('Dosya bırakma alanı hazırlanamadı.')
+            node.on('drop', DOMEventHandler(dropped, prevent_default=True))
+        self._dropzones_bound = True
+        return True
 
     def _item(self, fields):
         if not self._selected:
@@ -598,8 +635,16 @@ def _run_window(smoke_path=None):
     api = Api()
     base = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parents[1]))
     html = build_html(base)
+    width, height = 1180, 800
+    if not smoke_path:
+        # Give the overview room on large displays while respecting logical
+        # (DPI-adjusted) monitor bounds on laptops.
+        screens = webview.screens
+        if screens:
+            width = max(850, min(1600, screens[0].width - 80))
+            height = max(620, min(1000, screens[0].height - 80))
     api._window = webview.create_window('OKDEV • Arayüz kontrolü' if smoke_path else 'OKDEV • Mod Merkezi', html=html, js_api=api,
-                                       width=1180, height=800, min_size=(850, 620), background_color='#0d111a')
+                                       width=width, height=height, min_size=(850, 620), background_color='#0c0d11')
     def close_companions():
         if api._queue is not None:
             api._queue.close()
