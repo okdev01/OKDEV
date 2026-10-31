@@ -42,7 +42,7 @@ updater_log = get_named_logger("updater", prefix="log_updater")
 
 class UpdateDialog(Win32Window):
     """Win32 dialog window for showing update progress"""
-
+    
     STATUS_ID = 1001
     DETAIL_ID = 1002
     PROGRESS_ID = 1003

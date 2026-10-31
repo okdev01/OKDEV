@@ -94,7 +94,7 @@ class SkinInjector:
         self.zips_dir.mkdir(parents=True, exist_ok=True)
         
         # Initialize managers
-        self.tools_manager = ToolsManager(self.tools_dir)
+        self.tools_manager = ToolsManager(self.tools_dir, self.game_dir / "League of Legends.exe" if self.game_dir else None)
         self.zip_resolver = ZipResolver(self.zips_dir)
         # Rift Classic skins (LeagueSkins' classic/ folder, keyed by Classic champion IDs)
         self.classic_dir = get_classic_skins_dir()

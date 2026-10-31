@@ -17,10 +17,11 @@ from .patcher import LTK_PATCHER_DLL, LTK_PATCHER_HOST
 
 class ToolsManager:
     """Manages CSLOL tools detection and validation"""
-
-    def __init__(self, tools_dir: Path):
+    
+    def __init__(self, tools_dir: Path, game_exe: Optional[Path] = None):
         self.tools_dir = tools_dir
-
+        self.game_exe = game_exe
+    
     def check_tools_available(self) -> bool:
         """Check if the runtime injection tool is present."""
         required_tools = [
@@ -33,14 +34,14 @@ class ToolsManager:
         for tool in required_tools:
             if not (self.tools_dir / tool).exists():
                 missing_tools.append(tool)
-
+        
         if missing_tools:
             log.warning(f"Missing runtime injection dependencies: {missing_tools}")
             log.warning("Please place the missing files in injection/tools/")
             return False
-
+        
         return True
-
+    
     def detect_tools(self) -> Dict[str, Path]:
         """Detect runtime injection tools."""
         tools = {
@@ -58,7 +59,7 @@ class ToolsManager:
         serves the overlay built by mkoverlay. Users provide their own copy.
         """
         from okdev_ltk_delivery import resolve_patcher_dir
-        directory = resolve_patcher_dir(self.tools_dir)
+        directory = resolve_patcher_dir(self.tools_dir, self.game_exe)
         host = directory / LTK_PATCHER_HOST
         if host.exists() and (directory / LTK_PATCHER_DLL).exists():
             return host

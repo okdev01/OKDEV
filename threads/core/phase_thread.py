@@ -21,9 +21,9 @@ log = get_logger()
 
 class PhaseThread(threading.Thread):
     """Thread for monitoring game phase changes"""
-
+    
     INTERESTING = INTERESTING_PHASES
-
+    
     def __init__(
         self,
         lcu: LCU,
@@ -62,7 +62,7 @@ class PhaseThread(threading.Thread):
                 self.lcu.refresh_if_needed()
             except (OSError, ConnectionError) as e:
                 log.debug(f"LCU refresh failed in phase thread: {e}")
-
+            
             ph = self.lcu.phase if self.lcu.ok else None
 
             # A client restart OKDEV's loader deferred (the client wasn't ready,
@@ -76,7 +76,7 @@ class PhaseThread(threading.Thread):
 
             if ph == "None":
                 ph = None
-
+            
             # If phase is unknown (None), skip handling.
             # Use a grace period to avoid wiping Swiftplay state on transient
             # API hiccups (the LCU can briefly return None during transitions).

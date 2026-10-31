@@ -25,16 +25,16 @@ ERROR_ALREADY_EXISTS = 183
 
 class LockFile:
     """Context manager for application lock file"""
-
+    
     def __init__(self, lock_path: Path):
         self.path = lock_path
         self.file_handle = None
         self._acquired = False
-
+        
     def __enter__(self):
         """Acquire lock file"""
         self.path.parent.mkdir(parents=True, exist_ok=True)
-
+        
         try:
             # Try to create lock file exclusively
             self.file_handle = open(self.path, 'x')
@@ -52,7 +52,7 @@ class LockFile:
                 self.path.unlink()
                 return self.__enter__()  # Retry
             raise RuntimeError("Another instance is already running")
-
+    
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Release lock file"""
         try:
@@ -63,7 +63,7 @@ class LockFile:
         except (IOError, OSError, PermissionError) as e:
             log.debug(f"Lock file cleanup error (non-critical): {e}")
         return False
-
+    
     def _is_stale_lock(self) -> bool:
         """Check if lock file is from a dead process"""
         try:
@@ -93,11 +93,11 @@ def create_lock_file() -> bool:
         # Create a lock file in the state directory
         state_dir = get_state_dir()
         state_dir.mkdir(parents=True, exist_ok=True)
-
+        
         lock_file_path = state_dir / "okdev.lock"
         app_state = get_app_state()
         app_state.lock_file_path = lock_file_path
-
+        
         # Windows-only approach using file creation
         try:
             # Try to create the lock file exclusively
@@ -105,10 +105,10 @@ def create_lock_file() -> bool:
             app_state.lock_file.write(f"{os.getpid()}\n")
             app_state.lock_file.write(f"{time.time()}\n")
             app_state.lock_file.flush()
-
+            
             # Register cleanup function
             atexit.register(cleanup_lock_file)
-
+            
             return True
         except FileExistsError:
             # Lock file exists, check if process is still running
@@ -130,10 +130,10 @@ def create_lock_file() -> bool:
                             except OSError:
                                 # Process doesn't exist, we can proceed
                                 log.debug(f"Old process {old_pid} no longer exists")
-
+                    
                     # Old lock file is stale, remove it
                     os.remove(lock_file_path)
-
+                    
                     # Try again
                     app_state.lock_file = open(lock_file_path, 'x')
                     app_state.lock_file.write(f"{os.getpid()}\n")
@@ -141,7 +141,7 @@ def create_lock_file() -> bool:
                     app_state.lock_file.flush()
                     atexit.register(cleanup_lock_file)
                     return True
-
+                    
             except (IOError, ValueError) as e:
                 # If we can't read the lock file, assume it's stale
                 log.debug(f"Lock file read error: {e}, assuming stale")
@@ -156,7 +156,7 @@ def create_lock_file() -> bool:
                 except (IOError, OSError) as cleanup_error:
                     log.error(f"Failed to create lock file after cleanup: {cleanup_error}")
                     return False
-
+                
     except (IOError, OSError, PermissionError) as e:
         log.error(f"Failed to create lock file: {e}")
         return False
@@ -249,7 +249,7 @@ def check_single_instance() -> None:
                 # MB_OK (0x0) + MB_ICONERROR (0x10) + MB_SETFOREGROUND (0x10000) + MB_TOPMOST (0x40000)
                 # = 0x50010 - Ensures dialog appears on top and gets focus
                 ctypes.windll.user32.MessageBoxW(
-                    0,
+                    0, 
                     "Another instance of OKDEV is already running!\n\nPlease close the existing instance before starting a new one.",
                     "OKDEV - Instance Already Running",
                     0x50010  # MB_OK | MB_ICONERROR | MB_SETFOREGROUND | MB_TOPMOST

@@ -186,6 +186,9 @@ class SkinProcessor:
         self.shared_state.last_hovered_skin_id = skin_id
 
         # Use the matched name from the matcher instead of the input
+        from engine.bridge import capture_selection
+        capture_selection(self.shared_state)
+
         self.shared_state.last_hovered_skin_key = matched_name
         log.info(
             "[SkinMonitor] Skin '%s' mapped to ID %s (key=%s)",

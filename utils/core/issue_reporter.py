@@ -34,6 +34,8 @@ _ALLOWED_CODES = {
     'LTK_PATCHER_MISSING',    # User-provided LTK patcher files are missing
     'LTK_PATCHER_EOL',        # LTK patcher DLL no longer supports the current game build
     'LTK_PATCHER_FAILED',     # LTK patcher host/DLL reported an error
+    'LTK_HOST_REJECTED',      # DLL explicitly refuses the third-party host
+    'LTK_SKIN_REJECTED',      # Runtime explicitly refuses the selected skin payload
 }
 
 

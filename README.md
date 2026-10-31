@@ -2,6 +2,20 @@
 
 Windows için bağımsız sürümlenen OKDEV istemcisi.
 
+## 2.1.3: Normal kostüm seçimi yeniden çalışıyor
+
+31 Ekim oyun derlemesinde normal seçim ekranından seçilen kostümlerin oyun içinde uygulanması düzeltildi. Kayn / HEARTSTEEL ve kurulu OKDEV üzerinden İlkbahar Yaprakları Katarina antrenmanda doğrulandı. Test edilen oyun dosyasıyla eşleşen bilgisayarlarda uyumlu, değiştirilmemiş resmî LTK 1.29.1 bileşeni otomatik indirilir ve SHA-256 ile doğrulanır; ayrıca DLL veya LTK klasörü seçmek gerekmez.
+
+Bu sürüm hâlâ LTK kullanır. Oyun dosyası değiştiğinde bu uyumluluk seçimi otomatik devre dışı kalır; tüm gelecek yamalar için çalışma garantisi verilmez. Resmî bileşenin özgün derleme sınırı ve doğrulama kontrolleri korunur. OKDEV dağıtım paketleri LTK ikili dosyalarını içermez.
+
+Mevcut kullanıcılar açılıştaki güncelleme bildiriminden güncelleyebilir. Güncellemeyi maç dışında tamamlayın, OKDEV ve LoL istemcisini yeniden açın; ardından normal kostüm seçim ekranını kullanın.
+
+## Geliştirme: Bağımsız motor — oyun içinde henüz hazır değil
+
+Normal şampiyon seçim ekranındaki kostüm seçimini koruyan bağımsız arşiv çekirdeği `engine/` altında geliştiriliyor. Paket okuma, WAD birleştirme, oturum/chroma kimliği ve kaynak/çıktı doğrulaması LTK olmadan çalışıyor. Ayrı Windows dosya yönlendirme prototipi yalnızca kendi kontrollü test programında sınandı; LoL'e yüklenmedi ve oyun içinde skin uygulandığı doğrulanmadı.
+
+Mevcut uygulamanın oyun içi yolu hâlâ LTK'ye bağlıdır. Deneysel çıktı ve test başarıları çalışan bir oyuncu sürümü anlamına gelmez. Ayrıntılar: [çekirdek](engine/README.md), [native prototip](native/okdev_io_lab/README.md), [kalan çalışma zamanı engeli](engine/RUNTIME_STATUS.md).
+
 ## 2.1.2: Mod seçimi ve profil kayıtlarının korunması
 
 Yeni mod ayrı bir geçici klasörde hazırlanır. Paket hazırlama, klasör taşıma veya seçim kaydı başarısız olursa önceki seçim ve hazırlık dosyaları korunur; bellekteki seçim yalnızca kayıt tamamlanınca değiştirilir. Silinmiş, dosyaları eksik veya başka şampiyon/kategoriye ait mod istekleri mevcut seçimi kapatmadan reddedilir.

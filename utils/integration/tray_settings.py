@@ -217,10 +217,10 @@ class InjectionSettingsWindow(Win32Window):
                 buffer = ctypes.create_unicode_buffer(length + 1)
                 self.send_message(self.game_path_edit_hwnd, WM_GETTEXT, length + 1, ctypes.addressof(buffer))
                 path = buffer.value
-
+        
         if not self.game_path_status_hwnd:
             return
-
+        
         is_valid = self._validate_game_path(path)
         status_text = "✅" if is_valid else "❌"
         user32.SetWindowTextW(self.game_path_status_hwnd, status_text)

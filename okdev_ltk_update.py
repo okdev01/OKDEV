@@ -200,6 +200,16 @@ def ensure_patcher(tools, game, status=lambda text: None):
                 require_idle()
                 recover_pair(tools)
             current = check_ltk_patcher(tools, game)
+            from okdev_ltk_compat import resolve_verified, release_qualified, prepare_candidate
+            if resolve_verified(game):
+                return False
+            if release_qualified(game):
+                status('Test edilmiş LoL skin bileşeni resmî kaynaktan hazırlanıyor…')
+                prepare_candidate(game, status=status)
+                if not resolve_verified(game):
+                    raise PatcherUnavailable('Test edilmiş LoL skin bileşeni doğrulanamadı.')
+                status('LoL skin bileşeni hazır.')
+                return True
             from okdev_ltk_delivery import select_cached, sync_official
             if select_cached(game, stage=True):
                 return False

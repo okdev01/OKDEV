@@ -24,7 +24,9 @@ class LibraryFixture(unittest.TestCase):
         p = self.root / name
         with zipfile.ZipFile(p, 'w') as z:
             for filename, data in (files or {'WAD/Ahri.wad.client': b'fixture-wad-data'}).items():
-                z.writestr(filename, data)
+                # Stable archive identity across the ZIP two-second timestamp
+                # boundary: portable-profile tests re-create the same package.
+                z.writestr(zipfile.ZipInfo(filename), data)
         return p
 
     def item(self, mod_id='sample', **extra):

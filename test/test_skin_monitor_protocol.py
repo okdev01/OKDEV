@@ -19,6 +19,16 @@ def fixture():
 
 
 class SkinWireProtocolTests(unittest.TestCase):
+    def test_normal_client_choice_reaches_independent_engine_request(self):
+        handler,state=fixture()
+        state.phase='ChampSelect'
+        state.locked_champ_id=516
+        state.champ_select_generation=7
+        handler.handle_message(json.dumps({'type':'skin-hover','skin':'Fırtınanın Efendisi Ornn'}))
+        self.assertEqual(state.independent_selection.skin_id,516001)
+        self.assertEqual(state.independent_selection.champion_id,516)
+        self.assertEqual(state.independent_selection.session_id,'champselect:7')
+
     def test_regular_hover_reaches_selection_state(self):
         handler,state=fixture()
         handler.handle_message(json.dumps({'type':'skin-hover','skin':'Fırtınanın Efendisi Ornn'}))

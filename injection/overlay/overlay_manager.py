@@ -184,7 +184,7 @@ class OverlayManager:
     @staticmethod
     def _wait_for_game_exit(game, patcher, session: dict) -> None:
         """Wait on the game process itself; stop early if the patcher dies."""
-        while patcher.poll() is None and session["state"] != "failed":
+        while patcher.poll() is None and session["state"] != "failed" and not session.get("error"):
             try:
                 game.wait(timeout=1.0)
                 return
@@ -208,7 +208,7 @@ class OverlayManager:
             return 127
         
         from ..tools.tools_manager import ToolsManager
-        tools_manager = ToolsManager(self.tools_dir)
+        tools_manager = ToolsManager(self.tools_dir, self.game_dir / "League of Legends.exe" if self.game_dir else None)
         tools = tools_manager.detect_tools()
         exe = tools.get("modtools")
         if not exe or not exe.exists():
@@ -385,7 +385,7 @@ class OverlayManager:
             if self._early_patcher is not None or self.game_dir is None:
                 return
             from ..tools.tools_manager import ToolsManager
-            ltk_host = ToolsManager(self.tools_dir).detect_ltk_patcher()
+            ltk_host = ToolsManager(self.tools_dir, self.game_dir / "League of Legends.exe").detect_ltk_patcher()
             if not ltk_host or check_ltk_patcher(ltk_host.parent, self.game_dir / "League of Legends.exe").expired:
                 return
             overlay_dir = self.mods_dir.parent / "overlay"
@@ -464,7 +464,8 @@ class OverlayManager:
                         # e.g. "overlay verification failed, disabling overlay"
                         message = line.split(" ERROR ", 1)[1]
                         log.error(f"[INJECT] LTK patcher DLL: {message}")
-                        if "disabling overlay" in message:
+                        if any(marker in message.lower() for marker in (
+                                "disabling overlay", "refusing overlay", "host verification failed")):
                             session["error"] = message
             except Exception as e:
                 log.debug(f"[INJECT] Error reading LTK patcher output: {e}")
@@ -532,7 +533,7 @@ class OverlayManager:
             # scanning so a reconnect is hooked again, so wait for the game to end
             game_ended = False
             while proc.poll() is None:
-                if session["state"] == "failed":
+                if session["state"] == "failed" or session["error"]:
                     break
                 if stop_callback and stop_callback():
                     # The client can close during a match (CN/WeGame), which looks
@@ -541,7 +542,7 @@ class OverlayManager:
                     if game is not None:
                         log.info("[INJECT] The game is still running - keeping the LTK patcher until it exits")
                         self._wait_for_game_exit(game, proc, session)
-                        if proc.poll() is not None or session["state"] == "failed":
+                        if proc.poll() is not None or session["state"] == "failed" or session["error"]:
                             continue  # the patcher itself stopped: handled below as usual
                         if not stop_callback():
                             continue  # the game came back (reconnect)
@@ -602,6 +603,25 @@ class OverlayManager:
     @staticmethod
     def _report_ltk_patcher_failure(reason: str):
         """Show an LTK patcher failure in Troubleshooting."""
+        normalized = reason.lower()
+        if any(marker in normalized for marker in (
+                'skinhack', 'base-skin check:', 'other skins\' meshes')):
+            report_issue(
+                'LTK_SKIN_REJECTED', 'error',
+                'Skin uygulanmadı: motor, normal kostüm paketini doğrulamada reddetti.',
+                hint='Seçtiğiniz kostüm oyuna uygulanmadı. Bu motor sürümü temel kostüme '
+                     'başka bir Riot kostümünün modelini aktaran paketi reddediyor. '
+                     'Aynı paketi tekrar indirmek veya tekrar başlatmak çözüm değildir.',
+            )
+            return
+        if 'host verification failed' in reason.lower():
+            report_issue(
+                'LTK_HOST_REJECTED', 'error',
+                'Skin uygulanmadı: LTK, OKDEV üzerinden çalışmayı reddetti (host verification).',
+                hint='Bu bir mod seçimi hatası değil. LTK sağlayıcısının desteklediği bir entegrasyon gerekiyor; '
+                     'aynı dosyaları yeniden indirmek bu reddi gidermez.',
+            )
+            return
         report_issue(
             "LTK_PATCHER_FAILED",
             "error",

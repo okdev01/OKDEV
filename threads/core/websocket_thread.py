@@ -26,7 +26,7 @@ log = get_logger()
 
 class WSEventThread(threading.Thread):
     """WebSocket event thread with WAMP + lock counter + timer"""
-
+    
     def __init__(
         self,
         lcu: LCU,
@@ -48,7 +48,7 @@ class WSEventThread(threading.Thread):
         self.skin_scraper = skin_scraper
         self.app_status_callback = app_status_callback
         self.app_status = app_status
-
+        
         # Initialize handlers
         self.champion_lock_handler = ChampionLockHandler(
             lcu, state, injection_manager, skin_scraper
@@ -61,7 +61,7 @@ class WSEventThread(threading.Thread):
             lcu, state, self.champion_lock_handler, self.game_mode_detector, self.timer_manager, injection_manager,
             swiftplay_handler=swiftplay_handler,
         )
-
+        
         # Initialize WebSocket connection
         self.connection = WebSocketConnection(
             lcu,
@@ -71,45 +71,45 @@ class WSEventThread(threading.Thread):
             on_message=self._on_message,
             app_status_callback=app_status_callback,
         )
-
+    
     def run(self):
         """Main WebSocket loop"""
         self.connection.run()
-
+    
     def _on_message(self, ws, msg):
         """WebSocket message received (delegates to event handler)"""
         self.event_handler.handle_message(ws, msg)
-
+    
     def stop(self):
         """Stop the WebSocket thread gracefully"""
         self.connection.stop()
-
+    
     # Backward compatibility properties
     @property
     def is_connected(self) -> bool:
         """Get WebSocket connection status"""
         return self.connection.is_connected
-
+    
     @property
     def ws(self):
         """Get WebSocket instance (for backward compatibility)"""
         return self.connection.ws
-
+    
     @property
     def ticker(self):
         """Get current ticker instance (for backward compatibility)"""
         return self.timer_manager.ticker
-
+    
     @ticker.setter
     def ticker(self, value):
         """Set ticker instance (for backward compatibility)"""
         self.timer_manager.ticker = value
-
+    
     @property
     def last_locked_champion_id(self) -> Optional[int]:
         """Get last locked champion ID (for backward compatibility)"""
         return self.champion_lock_handler.last_locked_champion_id
-
+    
     @last_locked_champion_id.setter
     def last_locked_champion_id(self, value: Optional[int]):
         """Set last locked champion ID (for backward compatibility)"""

@@ -494,7 +494,7 @@ def run_league_unlock(args: Optional[argparse.Namespace] = None,
     # Parse arguments if they were not provided
     if args is None:
         args = setup_arguments()
-
+    
     # Setup logging and cleanup
     setup_logging_and_cleanup(args)
 
@@ -504,25 +504,25 @@ def run_league_unlock(args: Optional[argparse.Namespace] = None,
     from hub.preferences import get as hub_preferences
     if not hub_preferences()['start_minimized']:
         open_hub()
-
+    
     # Initialize app status manager
     app_status = AppStatus(tray_manager)
     log_success(log, "App status manager initialized", "")
-
+    
     # Check initial status (will show locked until all components are ready)
     app_status.update_status(force=True)
-
+    
     # Initialize core components
     lcu, skin_scraper, state, injection_manager = initialize_core_components(args, injection_threshold)
     from hub.helpers import start_helpers
     start_helpers(state)
     from launcher.update.pending import start_watcher
     start_watcher(state)
-
+    
     # Configure skin writing based on the final injection threshold (seconds → ms)
     state.skin_write_ms = max(0, int(injection_manager.injection_threshold * 1000))
     state.inject_batch = getattr(args, 'inject_batch', state.inject_batch) or state.inject_batch
-
+    
     # Create LCU disconnection handler
     on_lcu_disconnected = create_lcu_disconnection_handler(state, skin_scraper, app_status)
 
@@ -545,7 +545,7 @@ def run_league_unlock(args: Optional[argparse.Namespace] = None,
             state.stop = True
             log.debug(f"[DEBUG] State after setting stop: {state.stop}")
             log.info("Stop flag set - main loop should exit")
-
+            
             # Immediately try to trigger any pending console operations that might be blocking
             if sys.platform == "win32":
                 try:
@@ -555,7 +555,7 @@ def run_league_unlock(args: Optional[argparse.Namespace] = None,
                         msvcrt.getch()  # Consume any pending input
                 except (ImportError, OSError) as e:
                     log.debug(f"Console input check failed: {e}")
-
+            
             # Add a timeout to force quit if main loop doesn't exit
             def force_quit_timeout():
                 import time
@@ -566,11 +566,11 @@ def run_league_unlock(args: Optional[argparse.Namespace] = None,
                 if not app_state.shutting_down:
                     log.warning(f"Main loop did not exit within {MAIN_LOOP_FORCE_QUIT_TIMEOUT_S}s - forcing quit")
                     force_quit_handler()
-
-            timeout_thread = create_daemon_thread(target=force_quit_timeout,
+            
+            timeout_thread = create_daemon_thread(target=force_quit_timeout, 
                                                  name="ForceQuitTimeout")
             timeout_thread.start()
-
+        
         tray_manager.quit_callback = updated_tray_quit_callback
 
         def updated_tray_restart_callback():
@@ -607,12 +607,12 @@ def run_league_unlock(args: Optional[argparse.Namespace] = None,
             timeout_thread.start()
 
         tray_manager.restart_callback = updated_tray_restart_callback
-
+    
     # Initialize threads (this starts the WebSocket server)
     thread_manager, t_phase, t_ui, t_ws, t_lcu_monitor = initialize_threads(
         lcu, state, args, injection_manager, skin_scraper, app_status, on_lcu_disconnected, on_lcu_reconnected
     )
-
+    
     try:
         log.info("Waiting for WebSocket status before activating Pengu Loader...")
         while not t_ws.connection.is_connected:
@@ -676,7 +676,7 @@ def guarded_main():
             )
         except Exception:
             pass
-
+        
         error_msg = f"""
 ================================================================================
 FATAL ERROR - OKDEV Crashed
@@ -692,7 +692,7 @@ This error has been logged. Please report this issue with the log file.
 Log location: Check %LOCALAPPDATA%\\OKDEV\\logs\\
 ================================================================================
 """
-
+        
         # Try to log the error
         try:
             log = get_logger()
@@ -701,7 +701,7 @@ Log location: Check %LOCALAPPDATA%\\OKDEV\\logs\\
             # If logging fails, print to stderr
             print(error_msg, file=sys.stderr)
             print(f"Logging system error: {log_error}", file=sys.stderr)
-
+        
         # Show error dialog on Windows
         if sys.platform == "win32":
             try:
@@ -713,7 +713,7 @@ Log location: Check %LOCALAPPDATA%\\OKDEV\\logs\\
                 )
             except Exception:
                 pass
-
+        
         sys.exit(1)
 
 

@@ -27,6 +27,40 @@ class AutoBanTests(LibraryFixture):
         self.assertTrue(self.run_tick())
         self.assertEqual(self.lcu.s.patch.call_args.kwargs['json'], {'championId': 11, 'completed': True})
 
+    def test_empty_ui_list_uses_matching_backend_session(self):
+        with patch.object(self.ban, 'read', side_effect=[
+                self.session, [], self.session, [103, 11, 22], self.session]) as read:
+            self.assertTrue(self.ban.tick(self.lcu, 'ChampSelect'))
+        self.assertIn('lol-lobby-team-builder', read.call_args_list[3].args[1])
+        self.assertEqual(self.lcu.s.patch.call_args.kwargs['json']['championId'], 11)
+
+    def test_empty_backend_waits_without_guessing_from_priority(self):
+        with patch.object(self.ban, 'read', side_effect=[self.session, [], self.session, []]):
+            self.assertFalse(self.ban.tick(self.lcu, 'ChampSelect'))
+        self.assertEqual(self.ban.status, 'bannable-champions-not-ready')
+        self.lcu.s.patch.assert_not_called()
+
+    def test_fallback_rejects_other_session_or_cell(self):
+        for backend in (dict(self.session, gameId=99), dict(self.session, localPlayerCellId=5), None):
+            with self.subTest(backend=backend):
+                with patch.object(self.ban, 'read', side_effect=[self.session, [], backend]):
+                    self.assertFalse(self.ban.tick(self.lcu, 'ChampSelect'))
+        self.lcu.s.patch.assert_not_called()
+
+    def test_fallback_still_respects_late_manual_selection(self):
+        changed = deepcopy(self.session)
+        changed['actions'][0][0]['championId'] = 22
+        with patch.object(self.ban, 'read', side_effect=[self.session, [], self.session, [11, 22], changed]):
+            self.assertFalse(self.ban.tick(self.lcu, 'ChampSelect'))
+        self.lcu.s.patch.assert_not_called()
+
+    def test_malformed_backend_list_never_bans(self):
+        for available in ([True], ['11'], [0], {}):
+            with self.subTest(available=available):
+                with patch.object(self.ban, 'read', side_effect=[self.session, [], self.session, available]):
+                    self.assertFalse(self.ban.tick(self.lcu, 'ChampSelect'))
+        self.lcu.s.patch.assert_not_called()
+
     def test_each_pick_position_on_both_teams_targets_own_ban_action(self):
         for side in (0, 5):
             for position in range(5):

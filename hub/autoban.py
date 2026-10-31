@@ -73,6 +73,27 @@ class AutoBan:
         return 'waiting-for-eligible-ban cell={} own=[{}] available-priority={}'.format(
             cell, fields, [champion for champion in priority if champion in available])
 
+    def available_champions(self, lcu, session):
+        available = self.read(lcu, '/lol-champ-select/v1/bannable-champion-ids')
+        if available == []:
+            # Some client snapshots expose an empty UI list during the ban
+            # turn. Use the client's draft backend only for the same session;
+            # never infer availability from the user's preferred champions.
+            prefix = '/lol-lobby-team-builder/champ-select/v1/'
+            backend = self.read(lcu, prefix + 'session')
+            if (not isinstance(backend, dict) or session.get('gameId') is None
+                    or backend.get('gameId') != session.get('gameId')
+                    or backend.get('localPlayerCellId') != session.get('localPlayerCellId')):
+                self.status = 'bannable-session-not-ready'
+                return None
+            available = self.read(lcu, prefix + 'bannable-champion-ids')
+        if not isinstance(available, list) or any(type(c) is not int or c <= 0 for c in available):
+            self.status = 'invalid-bannable-champions'
+            return None
+        if not available:
+            self.status = 'bannable-champions-not-ready'
+        return available
+
     def tick(self, lcu, phase):
         if phase != 'ChampSelect':
             self.status = 'waiting-for-champion-select'
@@ -98,9 +119,8 @@ class AutoBan:
         if self.match_attempted:
             self.status = 'already-attempted'
             return False
-        available = self.read(lcu, '/lol-champ-select/v1/bannable-champion-ids')
-        if not isinstance(available, list) or any(type(c) is not int for c in available):
-            self.status = 'invalid-bannable-champions'
+        available = self.available_champions(lcu, session)
+        if not available:
             return False
         first = self.candidate(session, priority, set(available))
         if first is None or first[0] in self.attempted:

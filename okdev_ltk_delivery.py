@@ -144,7 +144,8 @@ def select_cached(game=None, stage=False):
 
 
 def resolve_patcher_dir(fallback, game=None):
-    return select_cached(game) or Path(fallback)
+    from okdev_ltk_compat import resolve_verified
+    return resolve_verified(game) or select_cached(game) or Path(fallback)
 
 
 def _hide_owned_windows(pid):

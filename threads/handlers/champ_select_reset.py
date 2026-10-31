@@ -13,6 +13,7 @@ def note_phase_for_reset(state, phase) -> None:
     """Re-arm the reset guard after leaving ChampSelect/FINALIZATION."""
     if phase not in _CHAMP_SELECT_PHASES:
         state.champ_select_reset_done = False
+        state.independent_selection = None
 
 
 def perform_champ_select_reset(state, lcu) -> bool:
@@ -32,6 +33,7 @@ def perform_champ_select_reset(state, lcu) -> bool:
     state.ui_last_text_generation = -1
     state.ui_last_text_timestamp = 0.0
     state.selected_skin_id = None
+    state.independent_selection = None
     try:
         state.owned_skin_ids.clear()
     except Exception:
