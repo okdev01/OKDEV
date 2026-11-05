@@ -103,6 +103,28 @@ class DeliveryTests(unittest.TestCase):
                 self.assertFalse(update.ensure_patcher(tools, Path('game')))
                 api.assert_not_called()
 
+    def test_signed_eol_survives_compiler_changes_and_never_downgrades_on_tampering(self):
+        from injection.tools.patcher import check_ltk_patcher
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp);key=SigningKey.generate()
+            cache,manager,digest,host_hash=self.fixture(root,key)
+            public=base64.b64encode(b'Ed'+b'12345678'+key.verify_key.encode()).decode()
+            with patch.object(delivery,'PUBLIC_KEY',public), patch.object(delivery,'HOST_SHA256',host_hash), \
+                 patch.object(delivery,'delivery_root',return_value=cache), \
+                 patch.object(delivery,'manager_dir',return_value=manager), \
+                 patch.object(delivery,'runtime_root',return_value=root/'runtime'), \
+                 patch.object(delivery,'read_game_build',return_value=101), \
+                 patch('injection.tools.patcher.read_game_build',return_value=101), \
+                 patch('injection.tools.patcher.read_dll_eol',return_value=None) as legacy:
+                selected=delivery.select_cached(Path('game'),stage=True)
+                self.assertIsNotNone(selected)
+                self.assertEqual(check_ltk_patcher(selected,Path('game')).eol,102)
+                legacy.assert_not_called()
+                (selected/delivery.DLL).write_bytes(b'tampered')
+                legacy.return_value=99999999
+                self.assertIsNone(check_ltk_patcher(selected,Path('game')).eol)
+                legacy.assert_not_called()
+
 
 if __name__ == '__main__':
     unittest.main()

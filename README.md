@@ -2,6 +2,16 @@
 
 Windows için bağımsız sürümlenen OKDEV istemcisi.
 
+## 2.1.4: 26.22 kostümleri ve güncel LTK uyumluluğu
+
+Yeni LTK DLL'sinde eski makine kodu kalıbıyla okunamayan uyumluluk tarihi artık doğrulanmış imzalı manifestten alınır. Resmî LTK Manager 1.33.0 / protokol 3 desteklenir. Dosya özeti, boyut, iptal listesi ve oyun derleme sınırı kontrolleri korunur. Başarısız bileşen indirmeleri kısa süreli beklemeye alınır; yeni resmî sürüm kontrolü devam eder.
+
+26.22 için K/DA FIRESTARTER Ahri, Evelynn, Kai'Sa ve Yangın Akali; K/DA Hitmaker Evelynn; Prestij Klasik Baron Kog'Maw ve ilgili renkler dahil 30 paket hazırlanır. Buna Müzik Hayranı Gragas (FIRESTARTER) ve Kog'Maw (Kuvvetli) dahildir. Önceki pakette bulunan Kog'Maw dosyası yalnızca bilinen eski SHA-256 değeri eşleşirse yenilenir; farklı kullanıcı/kaynak dosyaları korunur. Türkçe ve İngilizce isimler dahildir.
+
+Mevcut kullanıcılar maç dışında OKDEV'i yeniden açıp güncellemeyi kabul edebilir. Yeni kurulum için GitHub sürümündeki `OKDEV_Setup_2.1.4.exe` kullanılır. Güncelleme tamamlandıktan sonra OKDEV ve League istemci arayüzünü yeniden açın.
+
+750 Python testi ve 14 JavaScript kontrolü geçti. 30 paket için arşiv bütünlüğü, kaynak BIN alanlarının korunması, bağımlılıklar, yeniden içe aktarma ve yerel 26.22 oyun verileriyle overlay derlemesi doğrulandı. Güncel resmî `ltk_patcher-30` imzası ve oyun derleme uyumluluğu doğrulandı. **Bu sürüm için oyun içi görsel/ses testi yapılmadı.** Paket ve bileşen doğrulamaları bunun yerine geçmez.
+
 ## 2.1.3: Normal kostüm seçimi yeniden çalışıyor
 
 31 Ekim oyun derlemesinde normal seçim ekranından seçilen kostümlerin oyun içinde uygulanması düzeltildi. Kayn / HEARTSTEEL ve kurulu OKDEV üzerinden İlkbahar Yaprakları Katarina antrenmanda doğrulandı. Test edilen oyun dosyasıyla eşleşen bilgisayarlarda uyumlu, değiştirilmemiş resmî LTK 1.29.1 bileşeni otomatik indirilir ve SHA-256 ile doğrulanır; ayrıca DLL veya LTK klasörü seçmek gerekmez.

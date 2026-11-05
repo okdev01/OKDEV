@@ -2,6 +2,7 @@ import hashlib
 import json
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 from utils.download.bundled_skins import install_bundled_skins
@@ -56,6 +57,26 @@ class BundledSkinsTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             install_bundled_skins(self.bundle, self.target)
         self.assertFalse((self.target / 'skins').exists())
+
+    def test_default_installs_all_patch_manifests(self):
+        import shutil
+        for version in ('26.20', '26.22'):
+            shutil.copytree(self.bundle, self.root / 'assets/skin-patches' / version)
+        with patch('utils.download.bundled_skins.get_assets_dir', return_value=self.root / 'assets'):
+            self.assertEqual(install_bundled_skins(data_dir=self.target), 1)
+            self.assertEqual(install_bundled_skins(data_dir=self.target), 0)
+
+    def test_only_known_old_bundle_is_refreshed(self):
+        dest = self.target / 'skins' / self.relative
+        dest.parent.mkdir(parents=True)
+        dest.write_bytes(b'old bundled asset')
+        self.manifest['packages'][0]['replaces'] = [hashlib.sha256(dest.read_bytes()).hexdigest()]
+        self.save()
+        self.assertEqual(install_bundled_skins(self.bundle, self.target), 1)
+        self.assertEqual(dest.read_bytes(), b'verified fixture')
+        dest.write_bytes(b'new upstream asset')
+        self.assertEqual(install_bundled_skins(self.bundle, self.target), 0)
+        self.assertEqual(dest.read_bytes(), b'new upstream asset')
 
 
 if __name__ == '__main__':

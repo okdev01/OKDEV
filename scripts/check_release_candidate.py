@@ -129,11 +129,12 @@ def main():
     forbidden = {'config.ini', 'historic.json', 'mod_historic.json', 'party_sessions.json', 'party_keys.json',
                  'installed.json', 'settings.json', 'profiles.json', 'analytics_install_id.txt', 'mods_map.json',
                  'downloads.json', 'activity.json', 'selection-undo.json', 'shutdown.json'}
-    patch_root = ROOT / 'assets/skin-patches/26.20'
-    patch_manifest = json.loads((patch_root / 'manifest.json').read_text(encoding='utf-8'))
-    patch_assets = {'_internal/assets/skin-patches/26.20/' + item['path']: item['sha256']
-                    for item in patch_manifest['packages']}
-    check(len(patch_assets) == 45, 'Seven patch skins and 38 chromas')
+    patch_assets = {}
+    for manifest_path in sorted((ROOT / 'assets/skin-patches').glob('*/manifest.json')):
+        patch_manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+        prefix = '_internal/assets/skin-patches/' + manifest_path.parent.name + '/'
+        patch_assets.update({prefix + item['path']: item['sha256'] for item in patch_manifest['packages']})
+    check(len(patch_assets) == 75, '45 previous and 30 patch 26.22 skin/chroma packages')
     for label, path in [('installer_payload', ROOT / 'setup_app/payload.zip'), ('update', update)]:
         with zipfile.ZipFile(path) as bundle:
             names = bundle.namelist()

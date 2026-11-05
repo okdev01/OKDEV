@@ -14,7 +14,11 @@ from utils.core.safe_extract import join_within
 
 
 def install_bundled_skins(bundle_dir=None, data_dir=None):
-    bundle = (Path(bundle_dir) if bundle_dir else get_assets_dir() / 'skin-patches' / '26.20').resolve()
+    if bundle_dir is None:
+        root = get_assets_dir() / 'skin-patches'
+        return sum(install_bundled_skins(path.parent, data_dir)
+                   for path in sorted(root.glob('*/manifest.json')))
+    bundle = Path(bundle_dir).resolve()
     target = (Path(data_dir) if data_dir else get_user_data_dir()).resolve()
     manifest_path = bundle / 'manifest.json'
     if not manifest_path.is_file():
@@ -31,10 +35,11 @@ def install_bundled_skins(bundle_dir=None, data_dir=None):
         raw = Path(source).read_bytes()
         if hashlib.sha256(raw).hexdigest() != item['sha256']:
             raise ValueError('Bundled skin checksum mismatch: ' + relative)
-        prepared.append((Path(destination), raw))
+        prepared.append((Path(destination), raw, set(item.get('replaces', []))))
     installed = 0
-    for destination, raw in prepared:
-        if destination.exists():
+    for destination, raw, replaces in prepared:
+        previous = hashlib.sha256(destination.read_bytes()).hexdigest() if destination.is_file() else None
+        if destination.exists() and previous not in replaces:
             continue
         destination.parent.mkdir(parents=True, exist_ok=True)
         # Publish a complete file atomically, without overwriting a concurrent
@@ -46,7 +51,14 @@ def install_bundled_skins(bundle_dir=None, data_dir=None):
             os.fsync(stream.fileno())
         try:
             try:
-                os.link(temporary, destination)
+                if previous is not None:
+                    # Refresh only an explicitly identified older bundled asset.
+                    # Unknown upstream/user content is always preserved.
+                    if hashlib.sha256(destination.read_bytes()).hexdigest() != previous:
+                        continue
+                    os.replace(temporary, destination)
+                else:
+                    os.link(temporary, destination)
                 installed += 1
             except FileExistsError:
                 pass

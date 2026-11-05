@@ -44,7 +44,14 @@ def check_ltk_patcher(tools_dir: Path, game_exe: Optional[Path] = None) -> LtkPa
     host = tools_dir / LTK_PATCHER_HOST
     dll = tools_dir / LTK_PATCHER_DLL
     missing = [p.name for p in (host, dll) if not p.is_file()]
-    eol = read_dll_eol(dll) if dll.is_file() else None
+    eol = None
+    managed_delivery = False
+    if not missing:
+        from okdev_ltk_delivery import verified_delivery_eol, is_delivery_directory
+        managed_delivery = is_delivery_directory(tools_dir)
+        eol = verified_delivery_eol(tools_dir)
+    if eol is None and not managed_delivery:
+        eol = read_dll_eol(dll) if dll.is_file() else None
     game_build = read_game_build(game_exe) if game_exe is not None else None
     return LtkPatcherStatus(host=host, dll=dll, missing=missing, eol=eol,
                             game_build=game_build)

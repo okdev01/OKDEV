@@ -1,0 +1,261 @@
+{
+  "patch": "26.22",
+  "game_version": "16.22.8348910+branch.releases-16-22.content.release",
+  "packages": [
+    {
+      "skin_id": 103097,
+      "path": "103/103097/103097.fantome",
+      "sha256": "67e1fc6c3d755bce641b24414c602c1a330ef5afcee0598c4448abd24e7cfd59"
+    },
+    {
+      "skin_id": 103098,
+      "path": "103/103097/103098/103098.fantome",
+      "sha256": "f912b061dbe832d41b133c4c5867fa29ff7f0639716aea338a3c9136a27851ac"
+    },
+    {
+      "skin_id": 103099,
+      "path": "103/103097/103099/103099.fantome",
+      "sha256": "f881322667fb50e16fdeb302e2e7e30e1dc5045277f49f42cafd7e7e907bc010"
+    },
+    {
+      "skin_id": 103100,
+      "path": "103/103097/103100/103100.fantome",
+      "sha256": "285e06446919d0d4880d86f4b6cb9cda34c259c4b931e9def17182ac4e51762e"
+    },
+    {
+      "skin_id": 103101,
+      "path": "103/103097/103101/103101.fantome",
+      "sha256": "d52a262fa3e90e5e929a79375b88ff6ec5414ac7cb0edb1c640167149c43063e"
+    },
+    {
+      "skin_id": 103102,
+      "path": "103/103097/103102/103102.fantome",
+      "sha256": "e926181151d46d4f65cb7908f6022cc1fea3c8aa8121367b4b7fc42780ae5e85"
+    },
+    {
+      "skin_id": 103103,
+      "path": "103/103097/103103/103103.fantome",
+      "sha256": "f4f5fa5ba6705562a800b8aeb9225c4eee6223cb7d371378f8d2fcba203b00bc"
+    },
+    {
+      "skin_id": 103104,
+      "path": "103/103097/103104/103104.fantome",
+      "sha256": "b4ee47030cc1d8984f4593daa37ca437345c1dacddaa56d1bb15a2c0fb159bb4"
+    },
+    {
+      "skin_id": 103105,
+      "path": "103/103097/103105/103105.fantome",
+      "sha256": "77e185972691c3b53e8ec58c524131b472431ed279e8c0c1f95f48e5639905eb"
+    },
+    {
+      "skin_id": 28065,
+      "path": "28/28065/28065.fantome",
+      "sha256": "39753607f7fd4b5d3b1e6166cf9ea5e85b4a1e5e1d561b80cd60df9ad0d4b33b"
+    },
+    {
+      "skin_id": 28067,
+      "path": "28/28065/28067/28067.fantome",
+      "sha256": "47edaa74cfcbba055cbd85f57da77f921404c1446f7ec339635412d7fe24f676"
+    },
+    {
+      "skin_id": 28068,
+      "path": "28/28065/28068/28068.fantome",
+      "sha256": "59ee38ac1c8a6a9af7e9a35edf078c0677a68b70eab817ae91ec03e8f51335f2"
+    },
+    {
+      "skin_id": 28069,
+      "path": "28/28065/28069/28069.fantome",
+      "sha256": "0ec9ac0f0e625c5b954a982824b3258b7070f887a15ff73ea4b00fda1f938d1c"
+    },
+    {
+      "skin_id": 28070,
+      "path": "28/28065/28070/28070.fantome",
+      "sha256": "8390b41e16b127184bccee50e341563b18bf2d59672b355fcf08a697b10ade20"
+    },
+    {
+      "skin_id": 28071,
+      "path": "28/28065/28071/28071.fantome",
+      "sha256": "af498232e0759524313c7dc33ee955372a299f5d7dcd1b0934c4e2bca89ed093"
+    },
+    {
+      "skin_id": 28072,
+      "path": "28/28065/28072/28072.fantome",
+      "sha256": "5ef1be392b848b57e760bfe1582cacc62a942f2418d5d1d56cd488dd6769180e"
+    },
+    {
+      "skin_id": 28066,
+      "path": "28/28066/28066.fantome",
+      "sha256": "eead80736e5581c92212d049f0764fb8cb6fc666f31ea976fa35249a254020a3"
+    },
+    {
+      "skin_id": 145083,
+      "path": "145/145083/145083.fantome",
+      "sha256": "2b946d043b2ee51713088a2d20355a7f9cea16090f1b877a5a9c609f90b648a9"
+    },
+    {
+      "skin_id": 145084,
+      "path": "145/145083/145084/145084.fantome",
+      "sha256": "946ff8db2d9903f42d0613cf654cf46e2f0c569b8041ea7ca2458cda6d4d80d8"
+    },
+    {
+      "skin_id": 145085,
+      "path": "145/145083/145085/145085.fantome",
+      "sha256": "1568a3ac9b0b105fce3642594891c3922a2f8788bfc8fe962b79ef2edb8da993"
+    },
+    {
+      "skin_id": 145086,
+      "path": "145/145083/145086/145086.fantome",
+      "sha256": "2e45f5608886d320d487f97d4d2477e70a5a84c84e35158420d8a8a41f9ef788"
+    },
+    {
+      "skin_id": 145087,
+      "path": "145/145083/145087/145087.fantome",
+      "sha256": "cd6fc6bbe1cc887bbb6b90f4d6845773ad4cc9cba39da9e1cb211d869be5334f"
+    },
+    {
+      "skin_id": 145088,
+      "path": "145/145083/145088/145088.fantome",
+      "sha256": "7bf48ebb90bfbd09aa024b825d51a9d4b61113d13bc47fcce6691df4e05295b2"
+    },
+    {
+      "skin_id": 145089,
+      "path": "145/145083/145089/145089.fantome",
+      "sha256": "ad969acd22857d8c185ae6f72d4bc173bb553e69a80820e57379332fdeb60663"
+    },
+    {
+      "skin_id": 145090,
+      "path": "145/145083/145090/145090.fantome",
+      "sha256": "5abe5117a314cdcc61924cebed2b2ff0122eb432b6c3b8651fe389b34704ffb2"
+    },
+    {
+      "skin_id": 145091,
+      "path": "145/145083/145091/145091.fantome",
+      "sha256": "d3654e89c8fde55404e56001d1bde8847b123cdedb296f32bea72fbf405bc585"
+    },
+    {
+      "skin_id": 84102,
+      "path": "84/84102/84102.fantome",
+      "sha256": "c4c2f73b358dfde0dc7a7004b0e9bf568999b97e663301b9c358247a52817c06"
+    },
+    {
+      "skin_id": 96065,
+      "path": "96/96065/96065.fantome",
+      "sha256": "0ad2e208818daade8b3f10a0efd1487fef44448a96635bf8756f04072637e153",
+      "replaces": [
+        "e2ac70ca53da62ba2be2a57e5fa6f1d53fa7840fa5e0a403cb90283af0949dae"
+      ]
+    },
+    {
+      "skin_id": 96066,
+      "path": "96/96065/96066/96066.fantome",
+      "sha256": "563c3471908f27fda0209d84dafeec0a94f15606d5c7a3329ba293f69b2415c3",
+      "replaces": [
+        "345ae4de8358b52b8eb841025cddd2f08f43ce72d76ea8bc5373ff7cde05b443"
+      ]
+    },
+    {
+      "skin_id": 79049,
+      "path": "79/79039/79049/79049.fantome",
+      "sha256": "7e874ad740863f98fd2219cc5329b3167a6fc3ecc5ca194bf25afb1738cb737d"
+    }
+  ],
+  "names": {
+    "default": {
+      "103097": "K/DA FIRESTARTER Ahri",
+      "103098": "K/DA FIRESTARTER Ahri (Ruby)",
+      "103099": "K/DA FIRESTARTER Ahri (Sapphire)",
+      "103100": "K/DA FIRESTARTER Ahri (Emerald)",
+      "103101": "K/DA FIRESTARTER Ahri (Turquoise)",
+      "103102": "K/DA FIRESTARTER Ahri (Catseye)",
+      "103103": "K/DA FIRESTARTER Ahri (Amethyst)",
+      "103104": "K/DA FIRESTARTER Ahri (Pearl)",
+      "103105": "K/DA FIRESTARTER Ahri (Obsidian)",
+      "28065": "K/DA FIRESTARTER Evelynn",
+      "28067": "K/DA FIRESTARTER Evelynn (Obsidian)",
+      "28068": "K/DA FIRESTARTER Evelynn (Ruby)",
+      "28069": "K/DA FIRESTARTER Evelynn (Catseye)",
+      "28070": "K/DA FIRESTARTER Evelynn (Sapphire)",
+      "28071": "K/DA FIRESTARTER Evelynn (Tanzanite)",
+      "28072": "K/DA FIRESTARTER Evelynn (Pearl)",
+      "28066": "K/DA Hitmaker Evelynn",
+      "145083": "K/DA FIRESTARTER Kai'Sa",
+      "145084": "K/DA FIRESTARTER Kai'Sa (Ruby)",
+      "145085": "K/DA FIRESTARTER Kai'Sa (Tanzanite)",
+      "145086": "K/DA FIRESTARTER Kai'Sa (Sapphire)",
+      "145087": "K/DA FIRESTARTER Kai'Sa (Emerald)",
+      "145088": "K/DA FIRESTARTER Kai'Sa (Citrine)",
+      "145089": "K/DA FIRESTARTER Kai'Sa (Turquoise)",
+      "145090": "K/DA FIRESTARTER Kai'Sa (Pearl)",
+      "145091": "K/DA FIRESTARTER Kai'Sa (Obsidian)",
+      "84102": "K/DA FIRESTARTER Ignition Akali",
+      "96065": "Prestige Classic Baron Kog'Maw",
+      "96066": "Prestige Classic Baron Kog'Maw (Vivid)",
+      "79049": "Music Fan Gragas (FIRESTARTER)"
+    },
+    "en": {
+      "103097": "K/DA FIRESTARTER Ahri",
+      "103098": "K/DA FIRESTARTER Ahri (Ruby)",
+      "103099": "K/DA FIRESTARTER Ahri (Sapphire)",
+      "103100": "K/DA FIRESTARTER Ahri (Emerald)",
+      "103101": "K/DA FIRESTARTER Ahri (Turquoise)",
+      "103102": "K/DA FIRESTARTER Ahri (Catseye)",
+      "103103": "K/DA FIRESTARTER Ahri (Amethyst)",
+      "103104": "K/DA FIRESTARTER Ahri (Pearl)",
+      "103105": "K/DA FIRESTARTER Ahri (Obsidian)",
+      "28065": "K/DA FIRESTARTER Evelynn",
+      "28067": "K/DA FIRESTARTER Evelynn (Obsidian)",
+      "28068": "K/DA FIRESTARTER Evelynn (Ruby)",
+      "28069": "K/DA FIRESTARTER Evelynn (Catseye)",
+      "28070": "K/DA FIRESTARTER Evelynn (Sapphire)",
+      "28071": "K/DA FIRESTARTER Evelynn (Tanzanite)",
+      "28072": "K/DA FIRESTARTER Evelynn (Pearl)",
+      "28066": "K/DA Hitmaker Evelynn",
+      "145083": "K/DA FIRESTARTER Kai'Sa",
+      "145084": "K/DA FIRESTARTER Kai'Sa (Ruby)",
+      "145085": "K/DA FIRESTARTER Kai'Sa (Tanzanite)",
+      "145086": "K/DA FIRESTARTER Kai'Sa (Sapphire)",
+      "145087": "K/DA FIRESTARTER Kai'Sa (Emerald)",
+      "145088": "K/DA FIRESTARTER Kai'Sa (Citrine)",
+      "145089": "K/DA FIRESTARTER Kai'Sa (Turquoise)",
+      "145090": "K/DA FIRESTARTER Kai'Sa (Pearl)",
+      "145091": "K/DA FIRESTARTER Kai'Sa (Obsidian)",
+      "84102": "K/DA FIRESTARTER Ignition Akali",
+      "96065": "Prestige Classic Baron Kog'Maw",
+      "96066": "Prestige Classic Baron Kog'Maw (Vivid)",
+      "79049": "Music Fan Gragas (FIRESTARTER)"
+    },
+    "tr": {
+      "103097": "K/DA FIRESTARTER Ahri",
+      "103098": "K/DA FIRESTARTER Ahri (Yakut)",
+      "103099": "K/DA FIRESTARTER Ahri (Safir)",
+      "103100": "K/DA FIRESTARTER Ahri (Zümrüt)",
+      "103101": "K/DA FIRESTARTER Ahri (Turkuvaz)",
+      "103102": "K/DA FIRESTARTER Ahri (Kedigözü)",
+      "103103": "K/DA FIRESTARTER Ahri (Ametist)",
+      "103104": "K/DA FIRESTARTER Ahri (İnci Beyazı)",
+      "103105": "K/DA FIRESTARTER Ahri (Obsidiyen)",
+      "28065": "K/DA FIRESTARTER Evelynn",
+      "28067": "K/DA FIRESTARTER Evelynn (Obsidiyen)",
+      "28068": "K/DA FIRESTARTER Evelynn (Yakut)",
+      "28069": "K/DA FIRESTARTER Evelynn (Kedigözü)",
+      "28070": "K/DA FIRESTARTER Evelynn (Safir)",
+      "28071": "K/DA FIRESTARTER Evelynn (Tanzanit)",
+      "28072": "K/DA FIRESTARTER Evelynn (İnci Beyazı)",
+      "28066": "K/DA Hitmaker Evelynn",
+      "145083": "K/DA FIRESTARTER Kai'Sa",
+      "145084": "K/DA FIRESTARTER Kai'Sa (Yakut)",
+      "145085": "K/DA FIRESTARTER Kai'Sa (Tanzanit)",
+      "145086": "K/DA FIRESTARTER Kai'Sa (Safir)",
+      "145087": "K/DA FIRESTARTER Kai'Sa (Zümrüt)",
+      "145088": "K/DA FIRESTARTER Kai'Sa (Turuncu)",
+      "145089": "K/DA FIRESTARTER Kai'Sa (Turkuvaz)",
+      "145090": "K/DA FIRESTARTER Kai'Sa (İnci Beyazı)",
+      "145091": "K/DA FIRESTARTER Kai'Sa (Obsidiyen)",
+      "84102": "K/DA FIRESTARTER Yangın Akali",
+      "96065": "Prestij Klasik Baron Kog'Maw",
+      "96066": "Prestij Klasik Baron Kog'Maw (Kuvvetli)",
+      "79049": "Müzik Hayranı Gragas (FIRESTARTER)"
+    }
+  },
+  "game_rendering_verified": false
+}

@@ -11,6 +11,7 @@ import struct
 import subprocess
 import sys
 import tempfile
+import time
 from urllib.parse import urlparse
 
 import requests
@@ -46,6 +47,10 @@ def release_asset(release):
     if not 0 < asset.get('size', 0) <= 100 * 1024 * 1024:
         raise ValueError('LTK paket boyutu geçersiz.')
     return asset
+
+
+class MissingArchivePair(ValueError):
+    """Official installers may deliver the DLL separately."""
 
 
 class PatcherUnavailable(ValueError):
@@ -108,8 +113,10 @@ def extract_pair(installer, output):
     # Only the exact pair at the archive root is accepted; never run the installer.
     for name in NAMES:
         p = output / name
-        if not p.is_file() or p.stat().st_size > 20 * 1024 * 1024:
-            raise ValueError('LTK arşivinde beklenen dosyalar bulunamadı.')
+        if not p.is_file():
+            raise MissingArchivePair('LTK arşivinde beklenen dosyalar bulunamadı.')
+        if p.stat().st_size > 20 * 1024 * 1024:
+            raise ValueError('LTK dosya boyutu sınırı aşıldı.')
         data = p.read_bytes()
         if data[:2] != b'MZ' or len(data) < 64:
             raise ValueError('Geçersiz LTK dosyası.')
@@ -176,7 +183,30 @@ def install_pair(source, tools, game, asset):
         raise
 
 
-def ensure_patcher(tools, game, status=lambda text: None):
+def _delivery_backoff(tools, asset, game_build):
+    from okdev_ltk_policy import DELIVERY_RETRY_SECONDS
+    try:
+        path = tools / '.ltk-delivery-retry.json'
+        if path.stat().st_size > 8192:
+            return False
+        record = json.loads(path.read_text(encoding='utf-8'))
+        elapsed = time.time() - record['at']
+        return (record['digest'] == asset['digest'] and record['game_build'] == game_build
+                and 0 <= elapsed < DELIVERY_RETRY_SECONDS)
+    except (OSError, ValueError, KeyError, TypeError):
+        return False
+
+
+def ensure_patcher(tools, game, status=lambda text: None, *, force=False):
+    try:
+        return _ensure_patcher(tools, game, status, force=force)
+    except (requests.RequestException, subprocess.TimeoutExpired, subprocess.CalledProcessError) as error:
+        raise PatcherUnavailable(
+            'Skin bileşeni güncellenemedi; Mod Merkezi kullanılabilir. '
+            f'Bağlantı veya resmî hazırlama işlemini Bakım aracıyla yeniden deneyin ({type(error).__name__}).') from error
+
+
+def _ensure_patcher(tools, game, status=lambda text: None, *, force=False):
     """Healthy installs stay offline. Serialize recovery, download and pair swap."""
     import msvcrt
     tools, game = Path(tools), Path(game)
@@ -225,12 +255,26 @@ def ensure_patcher(tools, game, status=lambda text: None):
             # release is discovered immediately, without redownloading an archive
             # already proved incompatible with this exact game build.
             asset = latest_asset()
+            if not force and _delivery_backoff(tools, asset, game_build):
+                raise PatcherUnavailable('LTK teslimi henüz hazır değil. Tekrar indirme geçici olarak ertelendi; Bakım aracında onarım ile yeniden deneyebilirsiniz.')
             if _rejected_release(tools, asset, game_build):
                 raise PatcherUnavailable(_unavailable_message(asset))
             with tempfile.TemporaryDirectory(prefix='okdev-ltk-') as temp:
                 temp = Path(temp)
                 download_official(temp/'ltk-setup.exe', status, asset)
-                extract_pair(temp/'ltk-setup.exe', temp/'pair')
+                try:
+                    extract_pair(temp/'ltk-setup.exe', temp/'pair')
+                except MissingArchivePair:
+                    # New installers distribute the signed DLL separately.
+                    if sync_official(game, installer=temp/'ltk-setup.exe', status=status):
+                        status('LoL skin bileşeni hazır.')
+                        return True
+                    with atomic_write(tools / '.ltk-delivery-retry.json') as stream:
+                        json.dump({'digest':asset['digest'],'game_build':game_build,'at':time.time()},stream)
+                    raise PatcherUnavailable(
+                        'Resmî LTK paketi DLL dosyasını ayrı dağıtıyor. '
+                        'Bu OKDEV sürümü için uyumlu skin bileşeni henüz hazırlanamadı. '
+                        'Mod Merkezi kullanılabilir; skin uygulaması hazır değil.') from None
                 candidate = check_ltk_patcher(temp/'pair', game)
                 if candidate.missing or candidate.eol is None or candidate.game_build is None or candidate.expired:
                     if sync_official(game, installer=temp/'ltk-setup.exe', status=status):

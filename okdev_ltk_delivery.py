@@ -22,10 +22,7 @@ from injection.tools.patcher import read_dll_eol, read_game_build
 from utils.core.atomic_file import atomic_write
 
 PUBLIC_KEY = 'RWSk74swcHfkZfLblm3iSk9RLVHJ1xjtqn/zySIPaCBM1hecnlFy1Bxi'
-# Protocol-3 host from the SHA-256-verified official 1.32.0 release. A protocol
-# change requires an OKDEV update, rather than running an untested executable.
-HOST_SHA256 = '27de1bfdbf37129e42c12b18cc7b4f75c15d39bcd7afefe65c4c33d0e99fe856'
-HOST_MANAGER_VERSION = '1.32.0'
+from okdev_ltk_policy import HOST_SHA256, HOST_MANAGER_VERSION, SUPPORTED_PROTOCOL
 HOST = 'ltk_patcher_host.exe'
 DLL = 'ltk_patcher_dll.dll'
 
@@ -97,7 +94,7 @@ def runtime_root():
     return get_user_data_dir() / 'ltk-runtime'
 
 
-def select_cached(game=None, stage=False):
+def select_cached(game=None, stage=False, *, with_release=False):
     """Only a signed, non-revoked, compatible stable release can be selected."""
     try:
         root = delivery_root()
@@ -111,7 +108,7 @@ def select_cached(game=None, stage=False):
         manifest = manifests['stable']
         release = manifest['release']
         revoked = {digest for m in manifests.values() for digest in m['revoked']}
-        if (release['digest'] in revoked or release['protocol'] != 3
+        if (release['digest'] in revoked or release['protocol'] != SUPPORTED_PROTOCOL
                 or not release['managers'].strip().startswith('>=')
                 or HOST_MANAGER_VERSION not in SpecifierSet(release['managers'])):
             return None
@@ -121,7 +118,7 @@ def select_cached(game=None, stage=False):
         dll = root / release['digest'] / DLL
         host = manager_dir() / HOST
         if (not dll.is_file() or dll.stat().st_size != release['size'] or _sha(dll) != release['digest']
-                or read_dll_eol(dll) != release['eol'] or not host.is_file() or _sha(host) != HOST_SHA256):
+                or not host.is_file() or _sha(host) != HOST_SHA256):
             return None
         target = runtime_root() / release['digest']
         if stage:
@@ -138,9 +135,26 @@ def select_cached(game=None, stage=False):
             return None
         if _sha(target / HOST) != HOST_SHA256 or _sha(target / DLL) != release['digest']:
             return None
-        return target
+        return (target, release) if with_release else target
     except (OSError, ValueError, KeyError, TypeError, AttributeError, BadSignatureError):
         return None
+
+
+def is_delivery_directory(directory):
+    directory = Path(directory).resolve()
+    return (directory.parent == runtime_root().resolve()
+            and re.fullmatch(r'[0-9a-f]{64}', directory.name) is not None)
+
+
+def verified_delivery_eol(directory):
+    """Trust EOL only when the exact staged pair matches a signed current release."""
+    selected = select_cached(with_release=True)
+    if selected is None:
+        return None
+    target, release = selected
+    if Path(directory).resolve() != target.resolve():
+        return None
+    return release['eol']
 
 
 def resolve_patcher_dir(fallback, game=None):
